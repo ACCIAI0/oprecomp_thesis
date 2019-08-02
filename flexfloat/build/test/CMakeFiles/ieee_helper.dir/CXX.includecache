@@ -1,0 +1,28 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/alberto/oprecomp/flexfloat/test/IEEEHelper.cpp
+IEEEHelper.h
+/home/alberto/oprecomp/flexfloat/test/IEEEHelper.h
+bitset
+-
+cassert
+-
+cmath
+-
+cstdio
+-
+cstdlib
+-
+iostream
+-
+
+/home/alberto/oprecomp/flexfloat/test/IEEEHelper.h
+cmath
+-
+

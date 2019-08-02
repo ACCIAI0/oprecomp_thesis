@@ -1,0 +1,30 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../include/flexfloat.h
+flexfloat_config.h
+../include/flexfloat_config.h
+stdint.h
+-
+stdbool.h
+-
+stdio.h
+-
+fenv.h
+-
+quadmath.h
+-
+
+../include/flexfloat_config.h
+
+/home/alberto/oprecomp/flexfloat/examples/example01.c
+flexfloat.h
+/home/alberto/oprecomp/flexfloat/examples/flexfloat.h
+stdio.h
+-
+

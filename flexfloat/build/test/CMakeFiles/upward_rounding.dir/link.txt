@@ -1,0 +1,1 @@
+/usr/bin/c++  -O3 -DGTEST_HAS_TR1_TUPLE=0 -DGTEST_USE_OWN_TR1_TUPLE=0 -DNDEBUG  -rdynamic CMakeFiles/upward_rounding.dir/upward_rounding.cpp.o  -o upward_rounding ../libflexfloat.a ../lib/libgtest_main.a ../lib/libgtest.a -lpthread 

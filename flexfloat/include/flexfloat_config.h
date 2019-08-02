@@ -1,0 +1,1 @@
+#define FLEXFLOAT_ON_DOUBLE
