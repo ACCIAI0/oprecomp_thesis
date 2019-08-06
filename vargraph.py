@@ -135,7 +135,7 @@ def __parse_default(graph, op, level):
     return __parser[op[0]](graph, op, level)
 
 
-def parse_vars_file(file):
+def parse_vars_file(file: str) -> nx.DiGraph:
     with open(file) as jfile:
         data = json.load(jfile)
     graph = nx.DiGraph()
@@ -144,7 +144,7 @@ def parse_vars_file(file):
     return graph
 
 
-def plot(graph):
+def plot(graph: nx.DiGraph):
     fig = plt.figure()
     nx.draw_kamada_kawai(graph, with_labels=True, node_size=512, alpha=1, font_weight='bold')
     plt.show()
