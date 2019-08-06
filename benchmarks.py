@@ -14,7 +14,6 @@ class Benchmark:
         self.name = name
         self.graph = vargraph.parse_vars_file(benchmarks_home + name + '/program_vardeps.json')
         self.nVars = len(self.graph)
-        print("{}\n{}".format(self.nVars, self.graph))
 
     def plot_var_graph(self):
         vargraph.plot(self.graph)

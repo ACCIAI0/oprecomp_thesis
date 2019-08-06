@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import collections
+
 import json
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -15,8 +15,8 @@ def __parse_assignment(graph, op, level):
     res_node = 'V{}'.format(index)
     res_node_temp = 'T{}'.format(index)
 
-    left_op, left_nodes, left_top = __parser[left[0]](graph, left, level)
-    right_op, right_nodes, right_top = __parser[right[0]](graph, right, level)
+    left_op, left_nodes, left_top = __parse_default(graph, left, level)
+    right_op, right_nodes, right_top = __parse_default(graph, right, level)
 
     left_nodes.extend(right_nodes)
     nodes = list(set(left_nodes))
@@ -43,8 +43,8 @@ def __parse_expression(graph, op, level):
     res_node = 'V{}'.format(index)
     res_node_temp = 'T{}'.format(index)
 
-    left_op, left_nodes, left_top = __parser[left[0]](graph, left, level)
-    right_op, right_nodes, right_top = __parser[right[0]](graph, right, level)
+    left_op, left_nodes, left_top = __parse_default(graph, left, level)
+    right_op, right_nodes, right_top = __parse_default(graph, right, level)
 
     left_nodes.extend(right_nodes)
     nodes = list(set(left_nodes))
@@ -79,7 +79,6 @@ def __parse_primitive(graph, op, level):
 
 
 def __parse_var(graph, op, level):
-    print(op)
     node = 'V{}'.format(op[1])
     if node not in graph.nodes():
         graph.add_node(node)
@@ -94,8 +93,7 @@ def __parse_temp(graph, op, level):
     if node not in graph.nodes():
         graph.add_node(node)
     nodes = [node]
-    cast_op, cast_nodes, _ = __parser[content[0][0]](graph, content[0], level) if 1 == len(content) else \
-        __parser[content[0]](graph, content, level)
+    cast_op, cast_nodes, _ = __parse_default(graph, content, level)
     nodes.extend(cast_nodes)
     if cast_op in ['VV', 'V', 'F', 'E']:
         for n in cast_nodes:
@@ -107,7 +105,7 @@ def __parse_temp(graph, op, level):
 
 def __parse_function(graph, op, level):
     return_type = op[1]
-    _, nodes, top_node = __parser[return_type[0]](graph, return_type, level)
+    _, nodes, top_node = __parse_default(graph, return_type, level)
     return op[0], nodes, top_node
 
 
@@ -117,18 +115,8 @@ def __parse_constant(graph, op, level):
     return op[0], [], None
 
 
-def __parse_default(graph, op, level):
-    nodes = []
-    top_node = None
-    rop = op[0]
-    if len(op) == 1:  # it's a variable
-        _, nodes, top_node = __parser[op[0][0]](graph, op[0], level)
-        rop = 'VV'
-    return rop, nodes, top_node
-
-
 __parser = {
-    'A': __parse_assignment,  # Kind of weird, but I guess what I'm interested in is similar
+    'A': __parse_assignment,
     'R': __parse_conditional_exp,
     'P': __parse_primitive,
     'V': __parse_var,
@@ -139,16 +127,24 @@ __parser = {
 }
 
 
+def __parse_default(graph, op, level):
+    if op is None or op[0] is None:
+        return 'VV', [], None
+    if 1 == len(op):
+        op = op[0]
+    return __parser[op[0]](graph, op, level)
+
+
 def parse_vars_file(file):
     with open(file) as jfile:
         data = json.load(jfile)
     graph = nx.DiGraph()
     for op in data:
-        __parser[op[0]](graph, op, 0)
+        __parse_default(graph, op, 0)
     return graph
 
 
 def plot(graph):
     fig = plt.figure()
-    nx.draw(graph, with_labels=True, node_size=500, alpha=.5, font_weight='bold')
+    nx.draw_kamada_kawai(graph, with_labels=True, node_size=512, alpha=1, font_weight='bold')
     plt.show()
