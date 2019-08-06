@@ -23,7 +23,7 @@ class Classifier(Enum):
     DECISION_TREE = 'DT'
 
 
-class Init:
+class ArgumentsHolder:
 
     def __init__(self, benchmark=None, error=-1.0, regressor=Regressor.NEURAL_NETWORK,
                  classifier=Classifier.DECISION_TREE, dataset_index=0):
@@ -122,7 +122,15 @@ __args = {
 
 
 def handle_args(argv):
-    init = Init()
+    """
+        Handles the arguments passed as parameters at the start of the program. It can cause the entire program to quit
+        if any error is encountered (see ArgsError for the possible error types).
+        :param argv: arguments array. from the starting script, it is the system arguments list slice from the second
+        argument onward.
+        :return: an ArgumentHolder if all arguments are legal. If any of them is not, the program quits.
+    """
+
+    init = ArgumentsHolder()
     if argv[0] == '-help':
         s = ''
         for a in __args.keys():
