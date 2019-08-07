@@ -20,7 +20,7 @@ class Benchmark:
         if not self.__lazyEval:
             self.__graph = vargraph.parse_vars_file(benchmarks_home + self.__name + '/program_vardeps.json')
             self.__nVars = len(self.__graph)
-            self.__lazyEval = True;
+            self.__lazyEval = True
 
     def get__name(self):
         return self.__name
@@ -34,7 +34,7 @@ class Benchmark:
         return self.__nVars
 
     def plot_var_graph(self):
-        vargraph.plot(self.__graph)
+        vargraph.plot(self.get_graph())
 
 
 def exists(name: str) -> bool:

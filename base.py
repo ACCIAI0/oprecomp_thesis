@@ -13,7 +13,7 @@ def main(argv):
 	# Benchmarks information. Contains a relational graph among variables inside the benchmark program and the number
 	# of them.
 	bm = benchmarks.get_benchmark(args.benchmark)
-	print(bm.get_vars_number())
+	bm.plot_var_graph()
 	# TODO Get training set data
 	# TODO Create regressor 	<- Already trained at the end
 	# TODO Create classifier 	<- Ditto

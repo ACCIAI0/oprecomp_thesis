@@ -25,8 +25,9 @@ class Classifier(Enum):
 
 class ArgumentsHolder:
 
-    def __init__(self, benchmark=None, error=-1.0, regressor=Regressor.NEURAL_NETWORK,
-                 classifier=Classifier.DECISION_TREE, dataset_index=0):
+    def __init__(self, benchmark: benchmarks.Benchmark = None, error: float = -1.0,
+                 regressor: Regressor = Regressor.NEURAL_NETWORK, classifier: Classifier = Classifier.DECISION_TREE,
+                 dataset_index: int = 0):
         self.benchmark = benchmark
         self.error = error
         self.regressor = regressor
@@ -34,7 +35,7 @@ class ArgumentsHolder:
         self.datasetIndex = dataset_index
 
     def is_legal(self):
-        return self.benchmark is not None and self.error is not -1
+        return self.benchmark is not None and self.error is not -1.0
 
 
 def int_value(value):
@@ -47,44 +48,44 @@ def int_value(value):
     return error, v
 
 
-def __benchmark(init, value):
+def __benchmark(args, value):
     error = ArgsError.NO_ERROR
     if not benchmarks.exists(value):
         error = ArgsError.UNKNOWN_BENCHMARK
     if ArgsError.NO_ERROR == error:
-        init.benchmark = value
+        args.benchmark = value
     return error, value
 
 
-def _exp(init, value):
+def _exp(args, value):
     error, v = int_value(value)
     if ArgsError.NO_ERROR == error:
-        init.error = -numpy.log(numpy.power(1.0, -v))
+        args.error = -numpy.log(numpy.power(1.0, -v))
     return error, v
 
 
-def __regressor(init, value):
+def __regressor(args, value):
     error = ArgsError.NO_ERROR
     if value not in [reg.value for reg in Regressor]:
         error = ArgsError.REGRESSOR_ERROR
     if ArgsError.NO_ERROR == error:
-        init.regressor = Regressor(value)
+        args.regressor = Regressor(value)
     return error, value
 
 
-def __classifier(init, value):
+def __classifier(args, value):
     error = ArgsError.NO_ERROR
     if value not in [cl.value for cl in Classifier]:
         error = ArgsError.CLASSIFIER_ERROR
     if ArgsError.NO_ERROR == error:
-        init.classifier = Classifier(value)
+        args.classifier = Classifier(value)
     return error, value
 
 
-def __dataset(init, value):
+def __dataset(args, value):
     error, v = int_value(value)
     if ArgsError.NO_ERROR == error:
-        init.datasetIndex = v
+        args.datasetIndex = v
     return error, v
 
 
@@ -130,7 +131,7 @@ def handle_args(argv):
         :return: an ArgumentHolder if all arguments are legal. If any of them is not, the program quits.
     """
 
-    init = ArgumentsHolder()
+    args = ArgumentsHolder()
     if argv[0] == '-help':
         s = ''
         for a in __args.keys():
@@ -149,9 +150,9 @@ def handle_args(argv):
 
         if i + 1 < len(argv):
             v = argv[i + 1]
-        error, value = __args[p](init, v)
+        error, value = __args[p](args, v)
         error_handler(error, p, v)
-    if not init.is_legal():
+    if not args.is_legal():
         print("Benchmark and error exponent are mandatory")
         exit(1)
-    return init
+    return args

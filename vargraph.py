@@ -145,6 +145,7 @@ def parse_vars_file(file: str) -> nx.DiGraph:
 
 
 def plot(graph: nx.DiGraph):
+    # Creates the figure the draw call will use
     fig = plt.figure()
     nx.draw_kamada_kawai(graph, with_labels=True, node_size=512, alpha=1, font_weight='bold')
     plt.show()
