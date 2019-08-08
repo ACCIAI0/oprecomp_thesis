@@ -11,8 +11,9 @@ class ArgsError(Enum):
     NO_ERROR = 0
     UNKNOWN_BENCHMARK = 1
     INT_CAST_ERROR = 2
-    REGRESSOR_ERROR = 3
-    CLASSIFIER_ERROR = 4
+    INT_INVALID_VALUE = 3
+    REGRESSOR_ERROR = 4
+    CLASSIFIER_ERROR = 5
 
 
 class Regressor(Enum):
@@ -27,22 +28,26 @@ class ArgumentsHolder:
 
     def __init__(self, benchmark: benchmarks.Benchmark = None, error: float = -1.0,
                  regressor: Regressor = Regressor.NEURAL_NETWORK, classifier: Classifier = Classifier.DECISION_TREE,
-                 dataset_index: int = 0):
+                 dataset_index: int = 0, min_bits: int = 4, max_bits: int = 53):
         self.benchmark = benchmark
         self.error = error
         self.regressor = regressor
         self.classifier = classifier
         self.datasetIndex = dataset_index
+        self.minBitsNumber = min_bits
+        self.maxBitsNumber = max_bits
 
     def is_legal(self):
         return self.benchmark is not None and self.error is not -1.0
 
 
-def int_value(value):
+def __int_value(value):
     error = ArgsError.NO_ERROR
     v = 0
     try:
         v = int(value)
+        if 0 >= v:
+            error = ArgsError.INT_INVALID_VALUE
     except ValueError:
         error = ArgsError.INT_CAST_ERROR
     return error, v
@@ -58,7 +63,7 @@ def __benchmark(args, value):
 
 
 def _exp(args, value):
-    error, v = int_value(value)
+    error, v = __int_value(value)
     if ArgsError.NO_ERROR == error:
         args.error = -numpy.log(numpy.power(1.0, -v))
     return error, v
@@ -83,9 +88,23 @@ def __classifier(args, value):
 
 
 def __dataset(args, value):
-    error, v = int_value(value)
+    error, v = __int_value(value)
     if ArgsError.NO_ERROR == error:
         args.datasetIndex = v
+    return error, v
+
+
+def __min_bits(args, value):
+    error, v = __int_value(value)
+    if ArgsError.NO_ERROR == error:
+        args.minBitsNumber = v
+    return error, v
+
+
+def __max_bits(args, value):
+    error, v = __int_value(value)
+    if ArgsError.NO_ERROR == error:
+        args.maxBitsNumber = v
     return error, v
 
 
@@ -96,6 +115,8 @@ def error_handler(e, param, value):
         print("Can't find a benchmark called {}".format(value))
     elif ArgsError.INT_CAST_ERROR == e:
         print("Expected an integer value, found '{}' as {}".format(value, param))
+    elif ArgsError.INT_INVALID_VALUE == e:
+        print("{} value must be greater than 0".format(param))
     elif ArgsError.REGRESSOR_ERROR == e:
         s = ''
         for reg in Regressor:
@@ -118,7 +139,9 @@ __args = {
     '-exp': _exp,
     '-r': __regressor,
     '-c': __classifier,
-    '-dataset': __dataset
+    '-dataset': __dataset,
+    '-minb': __min_bits,
+    '-maxb': __max_bits
 }
 
 
