@@ -18,7 +18,7 @@ __clamped_target_error = -numpy.log(80)
 def __prepare_dataframe(dataset_size: int, benchmark: bm.Benchmark, clamp=True):
     data_file = 'exp_results_{}_{}.csv'.format(benchmark.get__name(), dataset_size)
 
-    dataframe =
+    dataframe = pandas.read_csv(__dataset_home + data_file)
 
 
 def create_training_test(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, set_size: int = 500):
