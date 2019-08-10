@@ -155,6 +155,11 @@ def handle_args(argv):
     """
 
     args = ArgumentsHolder()
+
+    if 0 == len(argv):
+        print("Parameters needed. Use -help for all possibilities.")
+        exit(-1)
+
     if argv[0] == '-help':
         s = ''
         for a in __args.keys():

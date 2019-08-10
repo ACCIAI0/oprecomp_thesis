@@ -4,6 +4,7 @@ import sys
 
 import argsmanaging as am
 import benchmarks
+import training
 
 
 def main(argv):
@@ -13,8 +14,10 @@ def main(argv):
 	# Benchmarks information. Contains a relational graph among variables inside the benchmark program and the number
 	# of them.
 	bm = benchmarks.get_benchmark(args.benchmark)
-	bm.plot_var_graph()
-	# TODO Get training set data
+
+	# Get training set data
+	training_set = training.create_training_test(args, bm)
+	print(training_set)
 	# TODO Create regressor 	<- Already trained at the end
 	# TODO Create classifier 	<- Ditto
 	# TODO Create a MP model
