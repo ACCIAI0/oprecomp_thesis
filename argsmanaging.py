@@ -40,6 +40,12 @@ class ArgumentsHolder:
     def is_legal(self):
         return self.benchmark is not None and self.error is not -1.0
 
+    def __str__(self):
+        return "BENCHMARK:\t\t\t{}\nTARGET ERROR:\t\t{}\nREGRESSOR:\t\t\t{}\nCLASSIFIER:\t\t\t{}\n" \
+               "DATASET #:\t\t\t{}\nBITS NUMBER:\t\t[{}, {}]"\
+            .format(self.benchmark, self.error, self.regressor, self.classifier,
+                    self.datasetIndex, self.minBitsNumber, self.maxBitsNumber)
+
 
 def __int_value(value):
     error = ArgsError.NO_ERROR
@@ -65,8 +71,8 @@ def __benchmark(args, value):
 def _exp(args, value):
     error, v = __int_value(value)
     if ArgsError.NO_ERROR == error:
-        args.error = -numpy.log(numpy.power(1.0, -v))
-    return error, v
+        args.error = -numpy.log(numpy.float_power(10, -v))
+    return error, args.error
 
 
 def __regressor(args, value):

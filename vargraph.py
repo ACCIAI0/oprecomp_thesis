@@ -5,18 +5,16 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 
-def __parse_assignment(graph, op, level):
-    level = op[1]
-    conditional_path = op[2]
-    index = op[3]
-    left = op[4][0]
-    right = op[4][1]
+def __parse_assignment(graph, op):
+    index = op[1]
+    left = op[2][0]
+    right = op[2][1]
 
     res_node = 'V{}'.format(index)
     res_node_temp = 'T{}'.format(index)
 
-    left_op, left_nodes, left_top = __parse_default(graph, left, level)
-    right_op, right_nodes, right_top = __parse_default(graph, right, level)
+    left_op, left_nodes, left_top = __parse_default(graph, left)
+    right_op, right_nodes, right_top = __parse_default(graph, right)
 
     left_nodes.extend(right_nodes)
     nodes = list(set(left_nodes))
@@ -24,16 +22,15 @@ def __parse_assignment(graph, op, level):
     if res_node_temp in nodes:
         res_node = res_node_temp
     if left_top is not None and left_top != res_node and left_top != res_node_temp:
-        graph.add_edge(left_top, res_node, weight=level)
+        graph.add_edge(left_top, res_node)
     if right_top is not None and right_top != res_node and right_top != res_node_temp:
-        graph.add_edge(right_top, res_node, weight=level)
+        graph.add_edge(right_top, res_node)
 
     return op[0], nodes, res_node
 
 
-def __parse_expression(graph, op, level):
+def __parse_expression(graph, op):
     op_type = op[1]
-    conditional_path = op[2]
     index = op[2]
     left = op[3]
     right = None
@@ -43,8 +40,8 @@ def __parse_expression(graph, op, level):
     res_node = 'V{}'.format(index)
     res_node_temp = 'T{}'.format(index)
 
-    left_op, left_nodes, left_top = __parse_default(graph, left, level)
-    right_op, right_nodes, right_top = __parse_default(graph, right, level)
+    left_op, left_nodes, left_top = __parse_default(graph, left)
+    right_op, right_nodes, right_top = __parse_default(graph, right)
 
     left_nodes.extend(right_nodes)
     nodes = list(set(left_nodes))
@@ -55,37 +52,35 @@ def __parse_expression(graph, op, level):
     if res_node_temp in nodes:
         res_node = res_node_temp
     if left_top is not None and left_top != res_node and left_top != res_node_temp:
-        graph.add_edge(left_top, res_node, weight=level)
+        graph.add_edge(left_top, res_node)
     if right_top is not None and right_top != res_node and right_top != res_node_temp:
-        graph.add_edge(right_top, res_node, weight=level)
+        graph.add_edge(right_top, res_node)
 
     return op[0], nodes, res_node
 
 
-def __parse_conditional_exp(graph, op, level):
-    level = op[1]
-    conditional_path = op[2]
-    op_type = op[3]
-    index = op[4]
-    left = op[5][0]
-    right = op[5][1]
+def __parse_conditional_exp(graph, op):
+    op_type = op[1]
+    index = op[2]
+    left = op[3][0]
+    right = op[3][1]
     node = 'V{}'.format(index)
     return op[0], [], node
 
 
-def __parse_primitive(graph, op, level):
+def __parse_primitive(graph, op):
     op_type = op[1]
     return op[0], [], None
 
 
-def __parse_var(graph, op, level):
+def __parse_var(graph, op):
     node = 'V{}'.format(op[1])
     if node not in graph.nodes():
         graph.add_node(node)
     return op[0], [node], node
 
 
-def __parse_temp(graph, op, level):
+def __parse_temp(graph, op):
     index = op[1]
     content = op[2]
 
@@ -93,23 +88,23 @@ def __parse_temp(graph, op, level):
     if node not in graph.nodes():
         graph.add_node(node)
     nodes = [node]
-    cast_op, cast_nodes, _ = __parse_default(graph, content, level)
+    cast_op, cast_nodes, _ = __parse_default(graph, content)
     nodes.extend(cast_nodes)
     if cast_op in ['VV', 'V', 'F', 'E']:
         for n in cast_nodes:
-            graph.add_edge(n, node, weight=level)
+            graph.add_edge(n, node)
             nodes.remove(n)
     nodes = list(set(nodes))
     return op[0], nodes, node
 
 
-def __parse_function(graph, op, level):
+def __parse_function(graph, op):
     return_type = op[1]
-    _, nodes, top_node = __parse_default(graph, return_type, level)
+    _, nodes, top_node = __parse_default(graph, return_type)
     return op[0], nodes, top_node
 
 
-def __parse_constant(graph, op, level):
+def __parse_constant(graph, op):
     const_type = op[1]
     value = op[2]
     return op[0], [], None
@@ -127,12 +122,12 @@ __parser = {
 }
 
 
-def __parse_default(graph, op, level):
+def __parse_default(graph, op):
     if op is None or op[0] is None:
         return 'VV', [], None
     if 1 == len(op):
         op = op[0]
-    return __parser[op[0]](graph, op, level)
+    return __parser[op[0]](graph, op)
 
 
 def parse_vars_file(file: str) -> nx.DiGraph:
@@ -140,7 +135,7 @@ def parse_vars_file(file: str) -> nx.DiGraph:
         data = json.load(jfile)
     graph = nx.DiGraph()
     for op in data:
-        __parse_default(graph, op, 0)
+        __parse_default(graph, op)
     return graph
 
 
