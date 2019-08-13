@@ -12,44 +12,67 @@ __dataset_home = "datasets/"
 
 __error_0_threshold = .05
 __error_high_threshold = .9
+__clamped_error_limit = .9
 __clamped_target_error = -numpy.log(80)
 
 
-def __prepare_dataframe_lhs(dataset_size: int, benchmark: bm.Benchmark, clamp=True):
+class TrainingSession:
+    def __init__(self, training_set, test_set, regressor_target_label, classifier_target_label):
+        self.__targetRegressor = training_set[regressor_target_label]
+        self.__targetClassifier = training_set[classifier_target_label]
+
+        del training_set[regressor_target_label]
+        del training_set[classifier_target_label]
+
+        self.__trainingSet = training_set
+
+        self.__testRegressor = test_set[regressor_target_label]
+        self.__testClassifier = test_set[classifier_target_label]
+
+        del test_set[regressor_target_label]
+        del test_set[classifier_target_label]
+
+        self.__testSet = test_set
+
+    def get_training_set(self):
+        return self.__trainingSet
+
+    def get_test_set(self):
+        return self.__testSet
+
+    def get_target_regressor(self):
+        return self.__targetRegressor
+
+    def get_target_classifier(self):
+        return self.__targetClassifier
+
+    def get_test_regressor(self):
+        return self.__testRegressor
+
+    def get_test_classifier(self):
+        return self.__testClassifier
+
+
+def __initialize_mean_std(benchmark: bm.Benchmark, index: int, clamp: bool = True):
     data_file = 'exp_results_{}.csv'.format(benchmark.get__name())
+    label = 'err_ds_{}'.format(index)
+    log_label = 'err_log_ds_{}'.format(index)
+    class_label = 'class_ds_{}'.format(index)
 
-    dataframe = pandas.read_csv(__dataset_home + data_file, sep=';')
-    del dataframe['err_mean']
-    del dataframe['err_std']
+    df = pandas.read_csv(__dataset_home + data_file, sep=';')
 
-    # Clamp high errors to a reasonable value
+    columns = [x for x in filter(lambda l: 'var_' in l or label == l, df.columns)]
+    df = df[columns]
+
     if clamp:
-        for col in dataframe.columns:
-            if 'err_ds_' in col:
-                dataframe.loc[dataframe[col] > __error_high_threshold, col] = __error_high_threshold
-
-    if dataset_size < len(dataframe):
-        dataframe = dataframe.sample(dataset_size)
-    return dataframe
+        df.loc[df[label] > __clamped_error_limit, label] = __clamped_error_limit
+    df[log_label] = [math.inf if 0 == x else -numpy.log(x) for x in df[label]]
+    df[class_label] = df.apply(lambda e: int(e[label] >= __error_high_threshold), axis=1)
+    return df
 
 
-def __filter(df: pandas.DataFrame, dataset_label, error_label, log_error_label):
-    deletion = []
-    for col in df.columns:
-        if 'var_' not in col and dataset_label not in col:
-            deletion.append(col)
-    for col in deletion:
-        del df[col]
-    df.loc[df[error_label] == 0] = math.inf
-    df[log_error_label] = -numpy.log(df[error_label])
-    return df[(df != 0).all(1)]
-
-
-def __calculate_class(df: pandas.DataFrame, error_label, class_error_label):
-    df[class_error_label] = df.apply(lambda c: int(c[error_label] >= __error_high_threshold), axis=1)
-
-
-def __select_subset(df: pandas.DataFrame, size: int, error_label: str):
+def __select_subset(df: pandas.DataFrame, size: int, index: int):
+    error_label = 'err_ds_{}'.format(index)
     n_large_errors = len(df[df[error_label] >= __error_high_threshold])
     ratio = n_large_errors / len(df)
 
@@ -65,52 +88,12 @@ def __select_subset(df: pandas.DataFrame, size: int, error_label: str):
     return df_t
 
 
-def create_training_test(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, set_size: int = 500):
-    dataset_label = 'ds_{}'.format(args.datasetIndex)
-    error_label = 'err_' + dataset_label
-    log_error_label = 'log_err_' + dataset_label
-    class_error_label = 'class_' + dataset_label
-    
-    # Prepare training set <- returns a Pandas dataframe
-    df = __prepare_dataframe_lhs(set_size, benchmark)
-
-    # Filters the set and removes all columns from other dataset with a different index. This also artificially sets
-    # all log errors of configurations with 'err_ds_{index}' = 0 to infinite (n / 0 would be an error).
-    df = __filter(df, dataset_label, error_label, log_error_label)
-
-    # Finally, it adds an additional label attribute for the classifier.
-    __calculate_class(df, error_label, class_error_label)
-
-    target_regressor = df[log_error_label]
-    target_classifier = df[class_error_label]
-    del df[error_label]
-    del df[log_error_label]
-    del df[class_error_label]
-    return df.drop_duplicates(), target_regressor, target_classifier
-
-
-def create_test_set(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, set_size: int = 9000):
-    dataset_label = 'ds_{}'.format(args.datasetIndex)
-    error_label = 'err_' + dataset_label
-    log_error_label = 'log_err_' + dataset_label
-    class_error_label = 'class_' + dataset_label
-
-    # Prepare training set <- returns a Pandas dataframe
-    df = __prepare_dataframe_lhs(set_size, benchmark)
-
-    df = df.sample(frac=1).reset_index(drop=True)
-    df = __select_subset(df, set_size, error_label)
-
-    # Filters the set and removes all columns from other dataset with a different index and. This also artificially sets
-    # all log errors of configurations with 'err_ds_{index}' = 0 to infinite (n / 0 would be an error).
-    df = __filter(df, dataset_label, error_label, log_error_label)
-
-    # Finally, it adds an additional label attribute for the classifier.
-    __calculate_class(df, error_label, class_error_label)
-
-    train_regressor = df[log_error_label]
-    train_classifier = df[class_error_label]
-    del df[error_label]
-    del df[log_error_label]
-    del df[class_error_label]
-    return df, train_regressor, train_classifier
+def create_training_session(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark,
+                            initial_sampling_size: int = 3000, set_size: int = 500):
+    df = __initialize_mean_std(benchmark, args.datasetIndex)
+    df = __select_subset(df, initial_sampling_size, args.datasetIndex)
+    df = df.reset_index(drop=True)
+    df = df[(df != 0).all(1)]
+    del df['err_ds_{}'.format(args.datasetIndex)]
+    return TrainingSession(df[:set_size], df[set_size:],
+                           'err_log_ds_{}'.format(args.datasetIndex), 'class_ds_0'.format(args.datasetIndex))
