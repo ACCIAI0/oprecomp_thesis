@@ -28,11 +28,11 @@ def main(argv):
     _, t = stop_w.stop()
     print("{} loaded in {}s ({} variables)".format(bm.get__name(), t, bm.get_vars_number()))
 
-    # Get training set data
+    # Build training set, test set for a new training session
     stop_w.start()
     session = training.create_training_session(args, bm, set_size=900)
     _, t = stop_w.stop()
-    print("Created training session from dataset #{} in {}s ({} entries from training, {} for test)"
+    print("Created first training session from dataset #{} in {}s ({} entries for training, {} for test)"
           .format(args.datasetIndex, t, len(session.get_training_set()), len(session.get_test_set())))
 
 
