@@ -1,6 +1,11 @@
 #!/usr/bin/python
 
+import warnings
+
+warnings.filterwarnings('ignore')
+
 import sys
+import os
 
 from stopwatch import Stopwatch
 
@@ -8,10 +13,13 @@ import argsmanaging as am
 import benchmarks
 import training
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 DEBUG = True
 
 
 def main(argv):
+
     stop_w = Stopwatch()
 
     # ArgumentsHolder containing all legal initialization params.
@@ -35,12 +43,16 @@ def main(argv):
     print("Created first training session from dataset #{} in {}s ({} entries for training, {} for test)"
           .format(args.datasetIndex, t, len(session.get_training_set()), len(session.get_test_set())))
 
+    # Train a regressor network
+    stop_w.start()
+    model, stats = training.regressor_trainings[args.regressor](args, bm, session)
+    _, t = stop_w.stop()
+    print("Trained the regressor network in {}s (MAE {})".format(t, stats['MAE']))
 
-# TODO Create regressor 	<- Already trained at the end
-# TODO Create classifier 	<- Ditto
-# TODO Create a MP model
-# TODO solve optimization problem
-# TODO FINAL CHECK BEING... who knows
+    # TODO Create classifier 	<- Ditto
+    # TODO Create a MP model
+    # TODO solve optimization problem
+    # TODO FINAL CHECK BEING... who knows
 
 
 '''
