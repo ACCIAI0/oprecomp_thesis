@@ -7,6 +7,7 @@ class Stopwatch:
     def __init__(self):
         self.__started = False
         self.__stop = 0
+        self.__exec_time = 0
 
     def start(self):
         if self.__started:
@@ -20,4 +21,9 @@ class Stopwatch:
             raise RuntimeError("The stopwatch was never started")
         self.__started = False
         t = time.time()
-        return t, t - self.__stop
+        duration = t - self.__stop
+        self.__exec_time += duration
+        return t, duration
+
+    def get_duration(self):
+        return self.__exec_time

@@ -5,7 +5,7 @@ import decimal
 
 import numpy
 import pandas
-from sklearn import preprocessing, metrics
+from sklearn import preprocessing, metrics, tree
 import keras
 from keras import models, layers, callbacks
 
@@ -112,7 +112,7 @@ def create_training_session(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark
     return TrainingSession(df[:set_size], df[set_size:], log_label, class_label)
 
 
-def __evaluate_predictions_nn(predicted, actual):
+def __evaluate_predictions_regressor(predicted, actual):
     stats_res = {}
     pred_n_rows, pred_n_cols = predicted.shape
     pred = predicted[:, 0]
@@ -172,6 +172,35 @@ def __evaluate_predictions_nn(predicted, actual):
     return stats_res
 
 
+def __evaluate_predictions_classifier(predicted, actual):
+    pred_classes = [0] * len(predicted)
+    for i in range(len(predicted)):
+        if .5 <= predicted[i]:
+            pred_classes[i] = 1
+
+    precision_s, recall_s, fscore_s, xyz = metrics.precision_recall_fscore_support(
+        actual, pred_classes, average='binary', pos_label=0)
+    precision_l, recall_l, fscore_l, xyz = metrics.precision_recall_fscore_support(
+        actual, pred_classes, average='binary', pos_label=1)
+    precision_w, recall_w, fscore_w, xyz = metrics.precision_recall_fscore_support(
+        actual, pred_classes, average='weighted')
+
+    stats_res = {
+        'small_error_precision': precision_s,
+        'small_error_recall': recall_s,
+        'small_error_fscore': fscore_s,
+        'large_error_precision': precision_l,
+        'large_error_recall': recall_l,
+        'large_error_fscore': fscore_l,
+        'precision': precision_w,
+        'recall': recall_w,
+        'fscore': fscore_w,
+        'accuracy': metrics.accuracy_score(actual, predicted)
+    }
+
+    return stats_res
+
+
 def __train_nn(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: TrainingSession,
                epochs: int = 100, batch_size: int = 32):
     # INITIALIZATION ===================================================================================================
@@ -206,10 +235,11 @@ def __train_nn(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: Tr
     prediction_model.fit(train_data_tensor, train_target_tensor, sample_weight=weights, epochs=epochs,
                          batch_size=batch_size, shuffle=True, validation_split=0.1, verbose=False,
                          callbacks=[early_stopping, reduce_lr])
+
     # TESTING ==========================================================================================================
     test_loss = prediction_model.evaluate(test_data_tensor, test_target_tensor, verbose=0)
     predicted = prediction_model.predict(test_data_tensor)
-    stats_res = __evaluate_predictions_nn(predicted, test_target_tensor)
+    stats_res = __evaluate_predictions_regressor(predicted, test_target_tensor)
     stats_res['test_loss'] = test_loss
 
     max_conf = [args.maxBitsNumber for i in range(benchmark.get_vars_number())]
@@ -222,6 +252,23 @@ def __train_nn(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: Tr
     return prediction_model, stats_res
 
 
+def __train_dt(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: TrainingSession, weight_large_errors: int = 10):
+    classes = session.get_target_classifier().tolist()
+    weights = [1] * len(classes)
+    if weight_large_errors != 1:
+        for i in range(len(classes)):
+            if 1 == classes[i]:
+                weights[i] = weight_large_errors
+    classifier = tree.DecisionTreeClassifier(max_depth=benchmark.get_vars_number() + 5)
+    classifier.fit(session.get_training_set(), session.get_target_classifier(), sample_weight=weights)
+    predicted = classifier.predict(session.get_test_set())
+    return classifier, __evaluate_predictions_classifier(predicted, session.get_test_classifier())
+
+
 regressor_trainings = {
     argsm.Regressor.NEURAL_NETWORK: __train_nn
+}
+
+classifier_trainings = {
+    argsm.Classifier.DECISION_TREE: __train_dt
 }
