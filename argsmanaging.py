@@ -163,7 +163,7 @@ def handle_args(argv):
     args = ArgumentsHolder()
 
     if 0 == len(argv):
-        print("Parameters needed. Use -help for all possibilities.")
+        print("Some parameters are mandatory. Use -help to see all possible parameter names.")
         exit(-1)
 
     if argv[0] == '-help':

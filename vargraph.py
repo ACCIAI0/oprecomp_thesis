@@ -1,8 +1,41 @@
 #!/usr/bin/python
 
+from enum import Enum
+
 import json
 import networkx as nx
 import matplotlib.pyplot as plt
+
+
+class VarType(Enum):
+    V = 1,
+    T = 2
+
+
+class Variable:
+    def __init__(self, index, var_type: VarType):
+        self.__name = str(var_type.name) + str(index)
+        self.__type = var_type
+
+    def __hash__(self):
+        return hash((self.__name, self.__type))
+
+    def __eq__(self, other):
+        if other is None:
+            return False
+        return self.__name == other.__name and self.__type == other.__type
+
+    def __str__(self):
+        return self.__name
+
+    def get_type(self) -> VarType:
+        return self.__type
+
+    def get_name(self) -> str:
+        return self.__name
+
+    def is_of_type(self, var_type: VarType) -> bool:
+        return self.__type == var_type
 
 
 def __parse_assignment(graph, op, level):
@@ -12,8 +45,8 @@ def __parse_assignment(graph, op, level):
     left = op[4][0]
     right = op[4][1]
 
-    res_node = 'V{}'.format(index)
-    res_node_temp = 'T{}'.format(index)
+    res_node = Variable(index, VarType.V)
+    res_node_temp = Variable(index, VarType.T)
 
     left_op, left_nodes, left_top = __parse_default(graph, left, level)
     right_op, right_nodes, right_top = __parse_default(graph, right, level)
@@ -40,8 +73,8 @@ def __parse_expression(graph, op, level):
     if 5 == len(op):
         right = op[4]
 
-    res_node = 'V{}'.format(index)
-    res_node_temp = 'T{}'.format(index)
+    res_node = Variable(index, VarType.V)
+    res_node_temp = Variable(index, VarType.T)
 
     left_op, left_nodes, left_top = __parse_default(graph, left, level)
     right_op, right_nodes, right_top = __parse_default(graph, right, level)
@@ -69,7 +102,7 @@ def __parse_conditional_exp(graph, op, level):
     index = op[4]
     left = op[5][0]
     right = op[5][1]
-    node = 'V{}'.format(index)
+    node = Variable(index, VarType.V)
     return op[0], [], node
 
 
@@ -79,17 +112,16 @@ def __parse_primitive(graph, op, level):
 
 
 def __parse_var(graph, op, level):
-    node = 'V{}'.format(op[1])
+    node = Variable(op[1], VarType.V)
     if node not in graph.nodes():
         graph.add_node(node)
     return op[0], [node], node
 
 
 def __parse_temp(graph, op, level):
-    index = op[1]
     content = op[2]
 
-    node = 'T{}'.format(index)
+    node = Variable(op[1], VarType.T)
     if node not in graph.nodes():
         graph.add_node(node)
     nodes = [node]
@@ -148,4 +180,22 @@ def plot(graph: nx.DiGraph):
     # Creates the figure the draw call will use
     fig = plt.figure()
     nx.draw_kamada_kawai(graph, with_labels=True, node_size=512, alpha=1, font_weight='bold')
-plt.show()
+    plt.show()
+
+
+def extract_leq_relations(graph: nx.DiGraph, only_temp: bool = False) -> list:
+    rels = []
+    for n in graph.nodes:
+        for nn in graph.successors(n):
+            if not only_temp or n.is_of_type(VarType.T) or nn.is_of_type(VarType.T):
+                rels.append((n, nn))
+    return rels
+
+
+def extract_cast_to_temp_relations(graph: nx.DiGraph) -> list:
+    rels = []
+    for n in graph.nodes:
+        if n.is_of_type(VarType.T) and 1 < len(list(graph.predecessors(n))):
+            rels.append((n, list(graph.predecessors(n))))
+    return rels
+

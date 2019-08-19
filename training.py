@@ -252,7 +252,8 @@ def __train_nn(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: Tr
     return prediction_model, stats_res
 
 
-def __train_dt(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: TrainingSession, weight_large_errors: int = 10):
+def __train_dt(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: TrainingSession,
+               weight_large_errors: int = 10):
     classes = session.get_target_classifier().tolist()
     weights = [1] * len(classes)
     if weight_large_errors != 1:

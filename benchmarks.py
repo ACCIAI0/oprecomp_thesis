@@ -22,19 +22,25 @@ class Benchmark:
             self.__nVars = len(self.__graph)
             self.__lazyEval = True
 
-    def get__name(self):
+    def get__name(self) -> str:
         return self.__name
 
     def get_graph(self):
         self.__evaluate()
         return self.__graph
 
-    def get_vars_number(self):
+    def get_vars_number(self) -> int:
         self.__evaluate()
         return self.__nVars
 
     def plot_var_graph(self):
         vargraph.plot(self.get_graph())
+
+    def get_binary_relations(self) -> dict:
+        return {
+            'leq': vargraph.extract_leq_relations(self.get_graph()),
+            'cast': vargraph.extract_cast_to_temp_relations(self.get_graph())
+        }
 
 
 def exists(name: str) -> bool:

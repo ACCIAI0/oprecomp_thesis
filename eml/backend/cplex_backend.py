@@ -9,6 +9,7 @@ import docplex.mp.model as cpx
 
 from eml.backend import base
 
+
 class CplexBackend(base.Backend):
     def __init__(self, ml_tol=1e-4):
         self._ml_tol = ml_tol

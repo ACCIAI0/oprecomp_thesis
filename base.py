@@ -10,12 +10,7 @@ from stopwatch import Stopwatch
 import argsmanaging as am
 import benchmarks
 import training
-
-import eml
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
-DEBUG = True
+import optimization
 
 
 def main(argv):
@@ -23,9 +18,8 @@ def main(argv):
 
     # ArgumentsHolder containing all legal initialization params.
     args = am.handle_args(argv)
-    if DEBUG:
-        print(args)
-        print("============================================\n")
+    print(args)
+    print("\n")
 
     # Benchmarks information. Contains a relational graph among variables inside the benchmark program and the number
     # of them.
@@ -46,14 +40,15 @@ def main(argv):
     stop_w.start()
     model, r_stats = training.regressor_trainings[args.regressor](args, bm, session)
     _, t = stop_w.stop()
-    print("Trained the regressor in {:.3f}s (MAE {:.3f})".format(t, r_stats['MAE']))
+    print("First training of the regressor completed in {:.3f}s (MAE {:.3f})".format(t, r_stats['MAE']))
 
     # Train a classifier
     stop_w.start()
     classifier, c_stats = training.classifier_trainings[args.classifier](args, bm, session)
     _, t = stop_w.stop()
-    print("Trained the classifier in {:.3f}s (accuracy {:.3f}%)".format(t, c_stats['accuracy'] * 100))
+    print("First training of the classifier completed in {:.3f}s (accuracy {:.3f}%)".format(t, c_stats['accuracy'] * 100))
 
+    optimization.create_optimization_model(args, bm)
     # TODO Create a MP model
     # TODO solve optimization problem
     # TODO FINAL CHECK BEING... who knows
@@ -65,7 +60,5 @@ def main(argv):
 Entry point. Imports EML and calls to main function if this is main module.
 '''
 if __name__ == '__main__':
-    # eml_path = os.getcwd()
-    # if eml_path not in sys.path:
-    #    sys.path.insert(1, eml_path)
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
     main(sys.argv[1:])
