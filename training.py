@@ -18,9 +18,7 @@ __dataset_home = "datasets/"
 __NN_regressor_type = '_regrNN_2x1x'
 
 __learning_rate = .001
-__error_high_threshold = .9
 __clamped_error_limit = .9
-__clamped_target_error = -numpy.log(80)
 
 
 class TrainingSession:
@@ -75,18 +73,19 @@ def __initialize_mean_std(benchmark: bm.Benchmark, label: str, log_label: str, c
     return df
 
 
-def __select_subset(df: pandas.DataFrame, error_label: str, size: int):
-    n_large_errors = len(df[df[error_label] >= __error_high_threshold])
+def __select_subset(df: pandas.DataFrame, threshold: float, error_label: str, size: int):
+    n_large_errors = len(df[df[error_label] >= threshold])
     ratio = n_large_errors / len(df)
 
     if 0 == ratio:
         return df.sample(size)
     acc = 0
+    df_t = pandas.DataFrame()
     while acc < ratio:
         if size > len(df):
             size = len(df) - 1
         df_t = df.sample(size)
-        acc = len(df_t[error_label] >= __error_high_threshold) / len(df_t)
+        acc = len(df_t[error_label] >= threshold) / len(df_t)
     return df_t
 
 
@@ -101,11 +100,11 @@ def create_training_session(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark
     # Keep entries with all non-zero values
     df = df[(df != 0).all(1)]
     # Selects a subset with a balanced ratio between high and low error values
-    df = __select_subset(df, label, initial_sampling_size)
+    df = __select_subset(df, args.largeErrorThreshold, label, initial_sampling_size)
     # Reset indexes to start from 0
     df = df.reset_index(drop=True)
     # Calculates the classifier class column
-    df[class_label] = df.apply(lambda e: int(e[label] >= __error_high_threshold), axis=1)
+    df[class_label] = df.apply(lambda e: int(e[label] >= args.largeErrorThreshold), axis=1)
     # Delete err_ds_<index> column as it is useless from here on
     del df[label]
 
@@ -201,8 +200,8 @@ def __evaluate_predictions_classifier(predicted, actual):
     return stats_res
 
 
-def __train_nn(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: TrainingSession,
-               epochs: int = 100, batch_size: int = 32):
+def __train_regressor_nn(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: TrainingSession,
+                         epochs: int = 100, batch_size: int = 32):
     # INITIALIZATION ===================================================================================================
     scaler = preprocessing.MinMaxScaler()
     train_data_tensor = scaler.fit_transform(session.get_training_set())
@@ -233,7 +232,7 @@ def __train_nn(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: Tr
     prediction_model.compile(optimizer=adam, loss='mean_squared_error', metrics=['mean_squared_error'])
     weights = numpy.full(len(train_data_tensor), 1)
     prediction_model.fit(train_data_tensor, train_target_tensor, sample_weight=weights, epochs=epochs,
-                         batch_size=batch_size, shuffle=True, validation_split=0.1, verbose=False,
+                         batch_size=batch_size, shuffle=True, validation_split=0.1, verbose=True,
                          callbacks=[early_stopping, reduce_lr])
 
     # TESTING ==========================================================================================================
@@ -252,8 +251,8 @@ def __train_nn(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: Tr
     return prediction_model, stats_res
 
 
-def __train_dt(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: TrainingSession,
-               weight_large_errors: int = 10):
+def __train_classifier_dt(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: TrainingSession,
+                          weight_large_errors: int = 10):
     classes = session.get_target_classifier().tolist()
     weights = [1] * len(classes)
     if weight_large_errors != 1:
@@ -267,9 +266,9 @@ def __train_dt(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, session: Tr
 
 
 regressor_trainings = {
-    argsm.Regressor.NEURAL_NETWORK: __train_nn
+    argsm.Regressor.NEURAL_NETWORK: __train_regressor_nn
 }
 
 classifier_trainings = {
-    argsm.Classifier.DECISION_TREE: __train_dt
+    argsm.Classifier.DECISION_TREE: __train_classifier_dt
 }

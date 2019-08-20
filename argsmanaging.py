@@ -28,7 +28,7 @@ class ArgumentsHolder:
 
     def __init__(self, benchmark: benchmarks.Benchmark = None, error: float = -1.0,
                  regressor: Regressor = Regressor.NEURAL_NETWORK, classifier: Classifier = Classifier.DECISION_TREE,
-                 dataset_index: int = 0, min_bits: int = 4, max_bits: int = 53):
+                 dataset_index: int = 0, min_bits: int = 4, max_bits: int = 53, large_error_threshold: float = .9):
         self.benchmark = benchmark
         self.error = error
         self.regressor = regressor
@@ -36,14 +36,15 @@ class ArgumentsHolder:
         self.datasetIndex = dataset_index
         self.minBitsNumber = min_bits
         self.maxBitsNumber = max_bits
+        self.largeErrorThreshold = large_error_threshold
 
     def is_legal(self):
         return self.benchmark is not None and self.error is not -1.0
 
     def __str__(self):
-        return "BENCHMARK:\t\t\t{}\nTARGET ERROR:\t\t{}\nREGRESSOR:\t\t\t{}\nCLASSIFIER:\t\t\t{}\n" \
-               "DATASET #:\t\t\t{}\nBITS NUMBER:\t\t[{}, {}]"\
-            .format(self.benchmark, self.error, self.regressor, self.classifier,
+        return "Using {:s} benchmark with a target error of {:.3f}. Training a {:s} regressor and a {:s} classifier " \
+               "using dataset # {:d}. All variables' number of bits must be in [{:d}, {:d}]"\
+            .format(self.benchmark, self.error, self.regressor.name, self.classifier.name,
                     self.datasetIndex, self.minBitsNumber, self.maxBitsNumber)
 
 

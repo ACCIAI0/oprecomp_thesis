@@ -16,6 +16,7 @@ class Variable:
     def __init__(self, index, var_type: VarType):
         self.__name = str(var_type.name) + str(index)
         self.__type = var_type
+        self.__index = index
 
     def __hash__(self):
         return hash((self.__name, self.__type))
@@ -27,6 +28,9 @@ class Variable:
 
     def __str__(self):
         return self.__name
+
+    def get_index(self):
+        return self.__index
 
     def get_type(self) -> VarType:
         return self.__type
