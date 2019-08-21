@@ -26,26 +26,77 @@ class Classifier(Enum):
 
 class ArgumentsHolder:
 
-    def __init__(self, benchmark: benchmarks.Benchmark = None, error: float = -1.0,
+    def __init__(self, benchmark: benchmarks.Benchmark = None, exp: float = 0,
                  regressor: Regressor = Regressor.NEURAL_NETWORK, classifier: Classifier = Classifier.DECISION_TREE,
                  dataset_index: int = 0, min_bits: int = 4, max_bits: int = 53, large_error_threshold: float = .9):
-        self.benchmark = benchmark
-        self.error = error
-        self.regressor = regressor
-        self.classifier = classifier
-        self.datasetIndex = dataset_index
-        self.minBitsNumber = min_bits
-        self.maxBitsNumber = max_bits
-        self.largeErrorThreshold = large_error_threshold
+        self.__benchmark = benchmark
+        self.__exp = exp
+        self.__regressor = regressor
+        self.__classifier = classifier
+        self.__datasetIndex = dataset_index
+        self.__minBitsNumber = min_bits
+        self.__maxBitsNumber = max_bits
+        self.__largeErrorThreshold = large_error_threshold
+
+    def get__benchmark(self):
+        return self.__benchmark
+
+    def set_benchmark(self, bm):
+        self.__benchmark = bm
+
+    def get_error(self):
+        return numpy.float_power(10, -self.__exp)
+
+    def get_error_log(self):
+        return -numpy.log(self.get_error())
+
+    def set_error_exp(self, exp):
+        self.__exp = exp
+
+    def get_regressor(self):
+        return self.__regressor
+
+    def set_regressor(self, regr):
+        self.__regressor = regr
+
+    def get_classifier(self):
+        return self.__classifier
+
+    def set_classifier(self, clsf):
+        self.__classifier = clsf
+
+    def get_dataset_index(self):
+        return self.__datasetIndex
+
+    def set_dataset_index(self, index):
+        self.__datasetIndex = index
+
+    def get_min_bits_number(self):
+        return self.__minBitsNumber
+
+    def set_min_bits_number(self, min_bits):
+        self.__minBitsNumber = min_bits
+
+    def get_max_bits_number(self):
+        return self.__maxBitsNumber
+
+    def set_max_bits_number(self, max_bits):
+        self.__maxBitsNumber = max_bits
+
+    def get_large_error_threshold(self):
+        return self.__largeErrorThreshold
+
+    def set_large_error_threshold(self, large_error_threshold):
+        self.__largeErrorThreshold = large_error_threshold
 
     def is_legal(self):
-        return self.benchmark is not None and self.error is not -1.0
+        return self.__benchmark is not None and self.__exp != 0
 
     def __str__(self):
         return "Using {:s} benchmark with a target error of {:.3f}. Training a {:s} regressor and a {:s} classifier " \
                "using dataset # {:d}. All variables' number of bits must be in [{:d}, {:d}]"\
-            .format(self.benchmark, self.error, self.regressor.name, self.classifier.name,
-                    self.datasetIndex, self.minBitsNumber, self.maxBitsNumber)
+            .format(self.__benchmark, self.get_error(), self.__regressor.name, self.__classifier.name,
+                    self.__datasetIndex, self.__minBitsNumber, self.__maxBitsNumber)
 
 
 def __int_value(value):
@@ -60,58 +111,58 @@ def __int_value(value):
     return error, v
 
 
-def __benchmark(args, value):
+def __benchmark(args: ArgumentsHolder, value):
     error = ArgsError.NO_ERROR
     if not benchmarks.exists(value):
         error = ArgsError.UNKNOWN_BENCHMARK
     if ArgsError.NO_ERROR == error:
-        args.benchmark = value
+        args.set_benchmark(value)
     return error, value
 
 
-def _exp(args, value):
+def _exp(args: ArgumentsHolder, value):
     error, v = __int_value(value)
     if ArgsError.NO_ERROR == error:
-        args.error = -numpy.log(numpy.float_power(10, -v))
-    return error, args.error
+        args.set_error_exp(v)
+    return error, args.get_error_log()
 
 
-def __regressor(args, value):
+def __regressor(args: ArgumentsHolder, value):
     error = ArgsError.NO_ERROR
     if value not in [reg.value for reg in Regressor]:
         error = ArgsError.REGRESSOR_ERROR
     if ArgsError.NO_ERROR == error:
-        args.regressor = Regressor(value)
+        args.set_regressor(Regressor(value))
     return error, value
 
 
-def __classifier(args, value):
+def __classifier(args: ArgumentsHolder, value):
     error = ArgsError.NO_ERROR
     if value not in [cl.value for cl in Classifier]:
         error = ArgsError.CLASSIFIER_ERROR
     if ArgsError.NO_ERROR == error:
-        args.classifier = Classifier(value)
+        args.set_classifier(Classifier(value))
     return error, value
 
 
-def __dataset(args, value):
+def __dataset(args: ArgumentsHolder, value):
     error, v = __int_value(value)
     if ArgsError.NO_ERROR == error:
-        args.datasetIndex = v
+        args.set_dataset_index(v)
     return error, v
 
 
-def __min_bits(args, value):
+def __min_bits(args: ArgumentsHolder, value):
     error, v = __int_value(value)
     if ArgsError.NO_ERROR == error:
-        args.minBitsNumber = v
+        args.set_min_bits_number(v)
     return error, v
 
 
-def __max_bits(args, value):
+def __max_bits(args: ArgumentsHolder, value):
     error, v = __int_value(value)
     if ArgsError.NO_ERROR == error:
-        args.maxBitsNumber = v
+        args.set_max_bits_number(v)
     return error, v
 
 

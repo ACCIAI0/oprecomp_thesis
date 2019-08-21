@@ -91,20 +91,20 @@ def __select_subset(df: pandas.DataFrame, threshold: float, error_label: str, si
 
 def create_training_session(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark,
                             initial_sampling_size: int = 3000, set_size: int = 500) -> TrainingSession:
-    label = 'err_ds_{}'.format(args.datasetIndex)
-    log_label = 'err_log_ds_{}'.format(args.datasetIndex)
-    class_label = 'class_ds_{}'.format(args.datasetIndex)
+    label = 'err_ds_{}'.format(args.get_dataset_index())
+    log_label = 'err_log_ds_{}'.format(args.get_dataset_index())
+    class_label = 'class_ds_{}'.format(args.get_dataset_index())
 
     # Initialize a pandas DataFrame from file, clamping error values and calculating log errors
     df = __initialize_mean_std(benchmark, label, log_label)
     # Keep entries with all non-zero values
     df = df[(df != 0).all(1)]
     # Selects a subset with a balanced ratio between high and low error values
-    df = __select_subset(df, args.largeErrorThreshold, label, initial_sampling_size)
+    df = __select_subset(df, args.get_large_error_threshold(), label, initial_sampling_size)
     # Reset indexes to start from 0
     df = df.reset_index(drop=True)
     # Calculates the classifier class column
-    df[class_label] = df.apply(lambda e: int(e[label] >= args.largeErrorThreshold), axis=1)
+    df[class_label] = df.apply(lambda e: int(e[label] >= args.get_large_error_threshold()), axis=1)
     # Delete err_ds_<index> column as it is useless from here on
     del df[label]
 
@@ -213,7 +213,7 @@ def __train_regressor_nn(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, s
 
     prediction_model = models.Sequential()
 
-    if benchmark.get__name() == 'BlackSholes' or benchmark.get__name() == 'Jacobi':
+    if benchmark.is_flagged():
         prediction_model.add(layers.Dense(int(n_features / 2), activation='relu', input_shape=input_shape))
         prediction_model.add(layers.Dense(int(n_features / 4), activation='relu'))
         prediction_model.add(layers.Dense(n_features, activation='relu'))
@@ -241,7 +241,7 @@ def __train_regressor_nn(args: argsm.ArgumentsHolder, benchmark: bm.Benchmark, s
     stats_res = __evaluate_predictions_regressor(predicted, test_target_tensor)
     stats_res['test_loss'] = test_loss
 
-    max_conf = [args.maxBitsNumber for i in range(benchmark.get_vars_number())]
+    max_conf = [args.get_max_bits_number() for i in range(benchmark.get_vars_number())]
     max_conf_dict = {}
     for i in range(len(max_conf)):
         max_conf_dict['var_{}'.format(i)] = [max_conf[i]]

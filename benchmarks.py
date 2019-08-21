@@ -2,6 +2,7 @@
 
 import os
 import glob
+import json
 
 import vargraph
 
@@ -15,10 +16,18 @@ class Benchmark:
         self.__lazyEval = False
         self.__graph = None
         self.__nVars = -1
+        self.__home = benchmarks_home + name + "/"
+        self.__configs = self.__home + "config_file.txt"
+
+        jdict = {}
+        with open(self.__home + "global_info.json") as jfile:
+            jdict = json.load(jfile)
+        self.__map = jdict.get('map', None)
+        self.__flag = jdict.get('flag', False)
 
     def __evaluate(self):
         if not self.__lazyEval:
-            self.__graph = vargraph.parse_vars_file(benchmarks_home + self.__name + '/program_vardeps.json')
+            self.__graph = vargraph.parse_vars_file(self.__home + "program_vardeps.json")
             self.__nVars = len(self.__graph)
             self.__lazyEval = True
 
@@ -32,6 +41,18 @@ class Benchmark:
     def get_vars_number(self) -> int:
         self.__evaluate()
         return self.__nVars
+
+    def get_home(self):
+        return self.__home
+
+    def get_map(self):
+        return self.__map
+
+    def get_configs_file(self):
+        return self.__configs
+
+    def is_flagged(self):
+        return self.__flag
 
     def plot_var_graph(self):
         vargraph.plot(self.get_graph())

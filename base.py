@@ -25,7 +25,7 @@ def main(argv):
     # Benchmarks information. Contains a relational graph among variables inside the benchmark program and the number
     # of them.
     stop_w.start()
-    bm = benchmarks.get_benchmark(args.benchmark)
+    bm = benchmarks.get_benchmark(args.get__benchmark())
     bm.get_graph()
     _, t = stop_w.stop()
     print("[LOG] {} loaded in {:.3f}s ({:d} variables)".format(bm.get__name(), t, bm.get_vars_number()))
@@ -35,19 +35,21 @@ def main(argv):
     session = training.create_training_session(args, bm, set_size=900)
     _, t = stop_w.stop()
     print("[LOG] Created first training session from dataset #{:d} in {:.3f}s ({:d} entries for training, "
-          "{:d} for test)".format(args.datasetIndex, t, len(session.get_training_set()), len(session.get_test_set())))
+          "{:d} for test)".format(args.get_dataset_index(), t, len(session.get_training_set()),
+                                  len(session.get_test_set())))
 
     # Train a regressor
     stop_w.start()
-    regressor, r_stats = training.regressor_trainings[args.regressor](args, bm, session)
+    regressor, r_stats = training.regressor_trainings[args.get_regressor()](args, bm, session)
     _, t = stop_w.stop()
     print("[LOG] First training of the regressor completed in {:.3f}s (MAE {:.3f})".format(t, r_stats['MAE']))
 
     # Train a classifier
     stop_w.start()
-    classifier, c_stats = training.classifier_trainings[args.classifier](args, bm, session)
+    classifier, c_stats = training.classifier_trainings[args.get_classifier()](args, bm, session)
     _, t = stop_w.stop()
-    print("[LOG] First training of the classifier completed in {:.3f}s (accuracy {:.3f}%)".format(t, c_stats['accuracy'] * 100))
+    print("[LOG] First training of the classifier completed in {:.3f}s (accuracy {:.3f}%)"
+          .format(t, c_stats['accuracy'] * 100))
 
     # Create a MP model
     stop_w.start()
@@ -55,10 +57,11 @@ def main(argv):
     _, t = stop_w.stop()
     print("[LOG] Created an optimization model in {:.3f}s".format(t))
 
-    # TODO solve optimization problem
+    # Solve optimization problem
+    config, its = optimization.try_model(args, bm, optim_model, regressor, classifier, stop_w)
     # TODO FINAL CHECK BEING... who knows
 
-    print("\nTOTAL EXECUTION TIME: {:.3f}s".format(stop_w.get_duration()))
+    print("\nTOTAL EXECUTION TIME: {:.3f}s, REFINEMENT ITERATIONS: {:d}".format(stop_w.get_duration(), its))
 
 
 '''
