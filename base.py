@@ -39,14 +39,26 @@ def main(argv):
                                   len(session.get_test_set())))
 
     # Train a regressor
+    trainer = training.RegressorTrainer.create_for(args.get_regressor(), session)
     stop_w.start()
-    regressor, r_stats = training.regressor_trainings[args.get_regressor()](args, bm, session)
+    regressor = trainer.create_regressor(bm)
+    _, t = stop_w.stop()
+    print("[LOG] Regressor created in {:.3f}s".format(t))
+    stop_w.start()
+    trainer.train_regressor(regressor, verbose=False)
+    r_stats = trainer.test_regressor(args, bm, regressor)
     _, t = stop_w.stop()
     print("[LOG] First training of the regressor completed in {:.3f}s (MAE {:.3f})".format(t, r_stats['MAE']))
 
     # Train a classifier
     stop_w.start()
-    classifier, c_stats = training.classifier_trainings[args.get_classifier()](args, bm, session)
+    trainer = training.ClassifierTrainer.create_for(args.get_classifier(), session)
+    classifier = trainer.create_classifier(bm)
+    _, t = stop_w.stop()
+    print("[LOG] Classifier created in {:.3f}s".format(t))
+    stop_w.start()
+    trainer.train_classifier(classifier)
+    c_stats = trainer.test_classifier(args, bm, classifier)
     _, t = stop_w.stop()
     print("[LOG] First training of the classifier completed in {:.3f}s (accuracy {:.3f}%)"
           .format(t, c_stats['accuracy'] * 100))
@@ -58,7 +70,8 @@ def main(argv):
     print("[LOG] Created an optimization model in {:.3f}s".format(t))
 
     # Solve optimization problem
-    config, its = optimization.try_model(args, bm, optim_model, regressor, classifier, stop_w)
+    config, its = optimization.try_model(args, bm, optim_model, regressor, classifier, stop_w,
+                                         session)
     # TODO FINAL CHECK BEING... who knows
 
     print("\nTOTAL EXECUTION TIME: {:.3f}s, REFINEMENT ITERATIONS: {:d}".format(stop_w.get_duration(), its))

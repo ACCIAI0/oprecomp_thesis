@@ -9,6 +9,7 @@ import numpy
 import io_utils
 import benchmarks
 import argsmanaging
+import training
 from docplex.mp import model
 from eml.backend import cplex_backend
 from eml.tree import embed as dt_embed
@@ -23,19 +24,23 @@ __classifier_threshold = .5
 
 
 class Iteration:
-    def __init__(self, args: argsmanaging.ArgumentsHolder, config, error, cls, predicted_error, predicted_class):
+    def __init__(self, args: argsmanaging.ArgumentsHolder, config, error, predicted_error, predicted_class,
+                 previous_iteration=None):
         self.__config = config
         self.__error = error
-        self.__class = cls
         self.__pError = predicted_error
         self.__pClass = predicted_class
-        self.__threshold = args.get_error()
+        self.__previous = previous_iteration
+        self.__args = args
 
     def get_config(self):
         return self.__config
 
     def get_error(self):
         return self.__error
+
+    def get_error_class(self):
+        return int(self.__error >= self.__args.get_large_error_threshold())
 
     def get_error_log(self):
         return -numpy.log(self.__error)
@@ -47,10 +52,25 @@ class Iteration:
         return self.__pClass
 
     def is_feasible(self):
-        return self.__error <= self.__threshold
+        return self.__error <= self.__args.get_error()
+
+    def get_delta_config(self):
+        if self.__previous is None:
+            return [0] * len(self.__config)
+        return [i - j for i, j in zip(self.__previous.get_config(), self.__config)]
+
+    def get_delta_error(self):
+        if self.__previous is None:
+            return 0
+        return self.__previous.get_error() - self.__error
+
+    def get_delta_error_log(self):
+        if self.__previous is None:
+            return 0
+        return self.__previous.get_error_log() - self.get_error_log()
 
 
-def __eml_regressor_nn(args: argsmanaging.ArgumentsHolder, benchmark: benchmarks.Benchmark, regressor):
+def __eml_regressor_nn(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, regressor):
     regressor_em = keras_reader.read_keras_sequential(regressor)
     regressor_em.reset_bounds()
     for neuron in regressor_em.layer(0).neurons():
@@ -59,7 +79,7 @@ def __eml_regressor_nn(args: argsmanaging.ArgumentsHolder, benchmark: benchmarks
 
     process.ibr_bounds(regressor_em)
 
-    if benchmark.get_vars_number() > __n_vars_bounds_tightening:
+    if bm.get_vars_number() > __n_vars_bounds_tightening:
         bounds_backend = cplex_backend.CplexBackend()
         process.fwd_bound_tighthening(bounds_backend, regressor_em, timelimit=__bounds_opt_time_limit)
 
@@ -71,7 +91,7 @@ __eml_regressors = {
 }
 
 
-def __eml_classifier_dt(args: argsmanaging.ArgumentsHolder, benchmark: benchmarks.Benchmark, classifier):
+def __eml_classifier_dt(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, classifier):
     classifier_em = sklearn_reader.read_sklearn_tree(classifier)
     for attr in classifier_em.attributes():
         classifier_em.update_lb(attr, args.get_min_bits_number())
@@ -85,20 +105,20 @@ __eml_classifiers = {
 }
 
 
-def create_optimization_model(args: argsmanaging.ArgumentsHolder, benchmark: benchmarks.Benchmark,
+def create_optimization_model(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark,
                               regressor, classifier, robustness: int = 0):
     backend = cplex_backend.CplexBackend()
     mdl = model.Model()
     x_vars = [mdl.integer_var(lb=args.get_min_bits_number(), ub=args.get_max_bits_number(), name='x_{}'.format(i))
-              for i in range(benchmark.get_vars_number())]
+              for i in range(bm.get_vars_number())]
     y_var = mdl.continuous_var(lb=-numpy.log(args.get_large_error_threshold()), ub=__max_target_error, name='y')
-    bit_sum_var = mdl.integer_var(lb=args.get_min_bits_number() * benchmark.get_vars_number(),
-                                  ub=args.get_max_bits_number() * benchmark.get_vars_number(), name='bit_sum')
+    bit_sum_var = mdl.integer_var(lb=args.get_min_bits_number() * bm.get_vars_number(),
+                                  ub=args.get_max_bits_number() * bm.get_vars_number(), name='bit_sum')
     class_var = mdl.continuous_var(lb=0, ub=1, name='class')
 
     target_error_log = math.ceil(args.get_error_log())
     max_config = pandas.DataFrame.from_dict({'var_{}'.format(i): [args.get_max_bits_number()]
-                                             for i in range(benchmark.get_vars_number())})
+                                             for i in range(bm.get_vars_number())})
     max_predictable_error = regressor.predict(max_config)[0][0]
 
     if max_predictable_error < target_error_log:
@@ -107,7 +127,7 @@ def create_optimization_model(args: argsmanaging.ArgumentsHolder, benchmark: ben
     mdl.add_constraint(y_var >= target_error_log + robustness)
 
     # Add relations from graph
-    relations = benchmark.get_binary_relations()
+    relations = bm.get_binary_relations()
     for vs, vg in relations['leq']:
         x_vs = mdl.get_var_by_name('x_{}'.format(vs.get_index()))
         x_vg = mdl.get_var_by_name('x_{}'.format(vg.get_index()))
@@ -117,10 +137,10 @@ def create_optimization_model(args: argsmanaging.ArgumentsHolder, benchmark: ben
         x_vv = [mdl.get_var_by_name('x_{}'.format(v.get_index())) for v in vv]
         mdl.add_constraint(mdl.min(x_vv) == x_vt)
 
-    reg_em = __eml_regressors[args.get_regressor()](args, benchmark, regressor)
+    reg_em = __eml_regressors[args.get_regressor()](args, bm, regressor)
     nn_embed.encode(backend, reg_em, mdl, x_vars, y_var, 'regressor')
 
-    cls_em = __eml_classifiers[args.get_classifier()](args, benchmark, classifier)
+    cls_em = __eml_classifiers[args.get_classifier()](args, bm, classifier)
     dt_embed.encode_backward_implications(backend, cls_em, mdl, x_vars, class_var, 'classifier')
     mdl.add_constraint(class_var <= __classifier_threshold)
     mdl.add_constraint(bit_sum_var == sum(x_vars))
@@ -139,7 +159,7 @@ def __cut_solution_2(mdl, cut_sol, n_iter, n_wc):
     mdl.add_constraint(sum(bin_vars_cut_vals) <= 1)
 
 
-def __refine_and_solve_mp(benchmark: benchmarks.Benchmark, mdl, bit_sum, increment_step, wrong_configs, n_iter):
+def __refine_and_solve_mp(bm: benchmarks.Benchmark, mdl, bit_sum, increment_step, wrong_configs, n_iter):
     bit_sum_var = mdl.get_var_by_name('bit_sum')
     bit_sum += increment_step
     mdl.add_constraint(bit_sum_var >= bit_sum)
@@ -157,7 +177,7 @@ def __refine_and_solve_mp(benchmark: benchmarks.Benchmark, mdl, bit_sum, increme
 
     opt_config = None
     if solution is not None:
-        opt_config = [int(solution['x_{}'.format(i)]) for i in range(benchmark.get_vars_number())]
+        opt_config = [int(solution['x_{}'.format(i)]) for i in range(bm.get_vars_number())]
 
     return opt_config, mdl, bit_sum
 
@@ -204,21 +224,21 @@ def __run_check(program, target_result, dataset_index):
     return __check_output(result, target_result)
 
 
-def __check_solution(args: argsmanaging.ArgumentsHolder, benchmark: benchmarks.Benchmark, opt_config):
-    io_utils.write_configs_file(benchmark.get_configs_file(), opt_config)
+def __check_solution(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, opt_config):
+    io_utils.write_configs_file(bm.get_configs_file(), opt_config)
     if -1 == args.get_dataset_index():
-        program = benchmark.get_home() + benchmark.get_map() + '.sh'
-        target_file = benchmark.get_home() + 'target.txt'
+        program = bm.get_home() + bm.get_map() + '.sh'
+        target_file = bm.get_home() + 'target.txt'
     else:
-        program = benchmark.get_home() + benchmark.get_map() + '_multiDataSet.sh'
-        target_file = benchmark.get_home() + 'targets/target_{}.txt'.format(args.get_dataset_index())
+        program = bm.get_home() + bm.get_map() + '_multiDataSet.sh'
+        target_file = bm.get_home() + 'targets/target_{}.txt'.format(args.get_dataset_index())
 
     target_result = io_utils.read_target(target_file)
     error = __run_check(program, target_result, args.get_dataset_index())
 
-    io_utils.write_configs_file(benchmark.get_configs_file(),
-                                [args.get_max_bits_number()] * benchmark.get_vars_number())
-    return error, 1 if error >= args.get_large_error_threshold() else 0
+    io_utils.write_configs_file(bm.get_configs_file(),
+                                [args.get_max_bits_number()] * bm.get_vars_number())
+    return error
 
 
 def __get_pred_class(config, regr, classifier):
@@ -228,56 +248,113 @@ def __get_pred_class(config, regr, classifier):
     return prediction_with_conf[0], class_pred_with_conf
 
 
-def __iterate(args: argsmanaging.ArgumentsHolder, benchmark: benchmarks.Benchmark, mdl, rollback_config,
-              regressor, classifier, bit_sum=0, increment_step=0, wrong_configs=[], n_iter=-1):
-    opt_config, mdl, bit_sum = __refine_and_solve_mp(benchmark, mdl, bit_sum, increment_step, wrong_configs, n_iter)
+def __iterate(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, mdl, rollback_config, regressor, classifier,
+              previous_it: Iteration = None, bit_sum=0, increment_step=0, wrong_configs=[], n_iter=-1):
+    opt_config, mdl, bit_sum = __refine_and_solve_mp(bm, mdl, bit_sum, increment_step, wrong_configs, n_iter)
     if opt_config is None:
         opt_config = rollback_config
         bit_sum = sum(opt_config)
 
-    error, e_class = __check_solution(args, benchmark, opt_config)
+    error = __check_solution(args, bm, opt_config)
     predicted_error, predicted_class = __get_pred_class(opt_config, regressor, classifier)
-    return bit_sum, mdl, Iteration(args, opt_config, error, e_class, predicted_error, predicted_class)
+    return bit_sum, mdl, Iteration(args, opt_config, error, predicted_error, predicted_class, previous_it)
 
 
-def try_model(args: argsmanaging.ArgumentsHolder, benchmark: benchmarks.Benchmark, mdl, regressor, classifier,
-              stop_w, max_iterations=2000, increment_frequency=10, first_increment=3):
+def __infer_examples(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, it: Iteration):
+    conf_dict = {'var_{}'.format(i): [it.get_config()[i]] for i in range(bm.get_vars_number())}
+    dif_target = 1 / (it.get_error_log() - args.get_error_log())
+    new_ex_weight = dif_target
+    if dif_target <= 0:
+        new_ex_weight = 0.01
+    elif dif_target > 2:
+        new_ex_weight = 1
+
+    # LOCAL SEARCH FOR MORE
+    return {
+        'df': pandas.DataFrame.from_dict(conf_dict),
+        'regressor_target': pandas.Series([it.get_error_log()]),
+        'classifier_target': pandas.Series([it.get_error_class()]),
+        'weights': [new_ex_weight]
+    }
+
+
+def __ml_refinement(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, regressor, classifier,
+                    session: training.TrainingSession, examples):
+    regr_target_label = 'reg'
+    class_target_label = 'cls'
+
+    df = examples['df']
+    df[regr_target_label] = examples['regressor_target']
+    df[class_target_label] = examples['classifier_target']
+
+    train = session.get_training_set()
+    train[regr_target_label] = session.get_regressor_target().values
+    train[class_target_label] = session.get_classifier_target().values
+    train = pandas.concat([train, df])
+
+    test = session.get_test_set()
+    test[regr_target_label] = session.get_test_regressor().values
+    test[class_target_label] = session.get_test_classifier().values
+
+    weights = numpy.asarray(examples['weights'])
+    single_session = training.TrainingSession(df, test.copy(), regr_target_label, class_target_label)
+    trainer = training.RegressorTrainer.create_for(args.get_regressor(), single_session)
+    b_size = len(df)
+    trainer.train_regressor(regressor, batch_size=b_size, weights=weights, verbose=False)
+    r_stats = trainer.test_regressor(args, bm, regressor)
+
+    session = training.TrainingSession(train, test, regr_target_label, class_target_label)
+    trainer = training.ClassifierTrainer.create_for(args.get_classifier(), session)
+    trainer.train_classifier(classifier)
+    c_stats = trainer.test_classifier(args, bm, classifier)
+    return session, r_stats, c_stats
+
+
+def try_model(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, mdl, regressor, classifier, stop_w,
+              session: training.TrainingSession, max_iterations=2000, increment_frequency=10, first_increment=3):
     stop_w.start()
     offset = int((args.get_max_bits_number() - args.get_min_bits_number()) / 2)
-    bit_sum, mdl, it = __iterate(args, benchmark, mdl, [args.get_min_bits_number() + offset] *
-                                 benchmark.get_vars_number(), regressor, classifier)
+    bit_sum, mdl, it = __iterate(args, bm, mdl, [args.get_min_bits_number() + offset] *
+                                 bm.get_vars_number(), regressor, classifier)
     _, t = stop_w.stop()
-    print("[OPT] Initial solution found in {:.3f}s. Error / target (log): {:.3e} / {:.3e}"
+    print("[OPT] Initial solution found in {:.3f}s. Error for given configuration, input target: {:.3e}, {:.3e}"
           .format(t, it.get_error(), args.get_error()))
 
     if it.is_feasible():
-        print("[OPT] solution: {}".format(it.get_config()))
+        print("[OPT] Solution: {}".format(it.get_config()))
     else:
-        print("[OPT] initial solution NOT feasible")
-
-    # STATS CALCULATION REMOVED SINCE NO ONE WAS USING THEM
+        print("[OPT] Initial solution NOT feasible")
 
     iterations = 0
     wrong_configs = []
     while not it.is_feasible() and iterations < max_iterations:
-        # TODO Infer new example
-        # TODO retrain
+        stop_w.start()
+        examples = __infer_examples(args, bm, it)
+        _, t = stop_w.stop()
+        print("[OPT] Inferring {:d} more examples ({:.3f}s)".format(len(examples), t))
+
+        stop_w.start()
+        session, r_stats, c_stats = __ml_refinement(args, bm, regressor, classifier, session, examples)
+        _, t = stop_w.stop()
+        print("[OPT] Retrained regressor (MAE {:.3f}) and classifier (accuracy {:.3f}%) in {:.3f}s"
+              .format(r_stats['MAE'], c_stats['accuracy'] * 100, t))
+
         increment = 0
         if 0 == iterations % increment_frequency and iterations >= first_increment:
             increment = 10
         wrong_configs.append(it.get_config())
 
         stop_w.start()
-        bit_sum, mdl, it = __iterate(args, benchmark, mdl, [v + 1 for v in it.get_config()], regressor, classifier,
+        bit_sum, mdl, it = __iterate(args, bm, mdl, [v + 1 for v in it.get_config()], regressor, classifier, it,
                                      bit_sum, increment, wrong_configs, iterations)
         _, t = stop_w.stop()
-        print("[OPT] solution # {:d} found in {:.3f}s. Error / target: {:.3e} / {:.3e}"
+        print("[OPT] Solution # {:d} found in {:.3f}s. Error / target: {:.3e} / {:.3e}"
               .format(iterations, t, it.get_error(), args.get_error()))
 
         if it.is_feasible():
-            print("[OPT] solution: {}".format(it.get_config()))
+            print("[OPT] Solution: {}".format(it.get_config()))
         else:
-            print("[OPT] solution # {:d} NOT feasible".format(iterations))
+            print("[OPT] Solution # {:d} NOT feasible".format(iterations))
 
         iterations += 1
 
