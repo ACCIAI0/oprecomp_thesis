@@ -44,6 +44,9 @@ class ArgumentsHolder:
     def set_benchmark(self, bm):
         self.__benchmark = bm
 
+    def get_exponent(self):
+        return self.__exp
+
     def get_error(self):
         return numpy.float_power(10, -self.__exp)
 
@@ -56,14 +59,14 @@ class ArgumentsHolder:
     def get_regressor(self):
         return self.__regressor
 
-    def set_regressor(self, regr):
-        self.__regressor = regr
+    def set_regressor(self, regressor):
+        self.__regressor = regressor
 
     def get_classifier(self):
         return self.__classifier
 
-    def set_classifier(self, clsf):
-        self.__classifier = clsf
+    def set_classifier(self, classifier):
+        self.__classifier = classifier
 
     def get_dataset_index(self):
         return self.__datasetIndex
@@ -93,7 +96,7 @@ class ArgumentsHolder:
         return self.__benchmark is not None and self.__exp != 0
 
     def __str__(self):
-        return "Using {:s} benchmark with a target error of {:.3f}. Training a {:s} regressor and a {:s} classifier " \
+        return "Using {:s} benchmark with a target error of {:.3e}. Training a {:s} regressor and a {:s} classifier " \
                "using dataset # {:d}. All variables' number of bits must be in [{:d}, {:d}]"\
             .format(self.__benchmark, self.get_error(), self.__regressor.name, self.__classifier.name,
                     self.__datasetIndex, self.__minBitsNumber, self.__maxBitsNumber)

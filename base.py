@@ -65,7 +65,7 @@ def main(argv):
 
     # Create a MP model
     stop_w.start()
-    optim_model = optimization.create_optimization_model(args, bm, regressor, classifier)
+    optim_model = optimization.create_optimization_model(args, bm, regressor, classifier, limit_search_exp=4)
     _, t = stop_w.stop()
     print("[LOG] Created an optimization model in {:.3f}s".format(t))
 

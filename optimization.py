@@ -1,11 +1,11 @@
 #!/usr/bin/python
 
-import math
 import subprocess
 
 import pandas
 import numpy
 
+import data_gen
 import io_utils
 import benchmarks
 import argsmanaging
@@ -17,7 +17,7 @@ from eml.tree.reader import sklearn_reader
 from eml.net import process, embed as nn_embed
 from eml.net.reader import keras_reader
 
-__max_target_error = -numpy.log(1e-80)
+__max_target_error = numpy.ceil(-numpy.log(1e-80))
 __n_vars_bounds_tightening = 10
 __bounds_opt_time_limit = 10
 __classifier_threshold = .5
@@ -106,25 +106,32 @@ __eml_classifiers = {
 
 
 def create_optimization_model(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark,
-                              regressor, classifier, robustness: int = 0):
+                              regressor, classifier, robustness: int = 0, limit_search_exp=0):
     backend = cplex_backend.CplexBackend()
     mdl = model.Model()
     x_vars = [mdl.integer_var(lb=args.get_min_bits_number(), ub=args.get_max_bits_number(), name='x_{}'.format(i))
               for i in range(bm.get_vars_number())]
-    y_var = mdl.continuous_var(lb=-numpy.log(args.get_large_error_threshold()), ub=__max_target_error, name='y')
-    bit_sum_var = mdl.integer_var(lb=args.get_min_bits_number() * bm.get_vars_number(),
-                                  ub=args.get_max_bits_number() * bm.get_vars_number(), name='bit_sum')
-    class_var = mdl.continuous_var(lb=0, ub=1, name='class')
 
-    target_error_log = math.ceil(args.get_error_log())
+    # If is a limited search in n orders of magnitudes, change the upper_bound to be -log(10e(n + exp)) where exp is the
+    # input parameter to calculate the error.
+    upper_bound = __max_target_error
+    if 0 != limit_search_exp:
+        upper_bound = numpy.ceil(-numpy.log(numpy.float_power(10, -args.get_exponent() - limit_search_exp)))
+
+    # Moved this to be a lower bound instead of a constraint
+    target_error_log = numpy.ceil(args.get_error_log())
     max_config = pandas.DataFrame.from_dict({'var_{}'.format(i): [args.get_max_bits_number()]
                                              for i in range(bm.get_vars_number())})
-    max_predictable_error = regressor.predict(max_config)[0][0]
+    limit_predictable_error = regressor.predict(max_config)[0][0]
+    if limit_predictable_error < target_error_log:
+        robustness = -numpy.ceil(target_error_log - limit_predictable_error)
 
-    if max_predictable_error < target_error_log:
-        robustness = -math.ceil(target_error_log - max_predictable_error)
+    y_var = mdl.continuous_var(lb=target_error_log + robustness, ub=upper_bound, name='y')
 
-    mdl.add_constraint(y_var >= target_error_log + robustness)
+    bit_sum_var = mdl.integer_var(lb=args.get_min_bits_number() * bm.get_vars_number(),
+                                  ub=args.get_max_bits_number() * bm.get_vars_number(), name='bit_sum')
+
+    class_var = mdl.continuous_var(lb=0, ub=1, name='class')
 
     # Add relations from graph
     relations = bm.get_binary_relations()
@@ -252,62 +259,13 @@ def __iterate(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, mdl,
               previous_it: Iteration = None, bit_sum=0, increment_step=0, wrong_configs=[], n_iter=-1):
     opt_config, mdl, bit_sum = __refine_and_solve_mp(bm, mdl, bit_sum, increment_step, wrong_configs, n_iter)
     if opt_config is None:
+        print('[OPT] WARNING: solution not found. Using rollback solution')
         opt_config = rollback_config
         bit_sum = sum(opt_config)
 
     error = __check_solution(args, bm, opt_config)
     predicted_error, predicted_class = __get_pred_class(opt_config, regressor, classifier)
     return bit_sum, mdl, Iteration(args, opt_config, error, predicted_error, predicted_class, previous_it)
-
-
-def __infer_examples(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, it: Iteration):
-    conf_dict = {'var_{}'.format(i): [it.get_config()[i]] for i in range(bm.get_vars_number())}
-    dif_target = 1 / (it.get_error_log() - args.get_error_log())
-    new_ex_weight = dif_target
-    if dif_target <= 0:
-        new_ex_weight = 0.01
-    elif dif_target > 2:
-        new_ex_weight = 1
-
-    # LOCAL SEARCH FOR MORE
-    return {
-        'df': pandas.DataFrame.from_dict(conf_dict),
-        'regressor_target': pandas.Series([it.get_error_log()]),
-        'classifier_target': pandas.Series([it.get_error_class()]),
-        'weights': [new_ex_weight]
-    }
-
-
-def __ml_refinement(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, regressor, classifier,
-                    session: training.TrainingSession, examples):
-    regr_target_label = 'reg'
-    class_target_label = 'cls'
-
-    df = examples['df']
-    df[regr_target_label] = examples['regressor_target']
-    df[class_target_label] = examples['classifier_target']
-
-    train = session.get_training_set()
-    train[regr_target_label] = session.get_regressor_target().values
-    train[class_target_label] = session.get_classifier_target().values
-    train = pandas.concat([train, df])
-
-    test = session.get_test_set()
-    test[regr_target_label] = session.get_test_regressor().values
-    test[class_target_label] = session.get_test_classifier().values
-
-    weights = numpy.asarray(examples['weights'])
-    single_session = training.TrainingSession(df, test.copy(), regr_target_label, class_target_label)
-    trainer = training.RegressorTrainer.create_for(args.get_regressor(), single_session)
-    b_size = len(df)
-    trainer.train_regressor(regressor, batch_size=b_size, weights=weights, verbose=False)
-    r_stats = trainer.test_regressor(args, bm, regressor)
-
-    session = training.TrainingSession(train, test, regr_target_label, class_target_label)
-    trainer = training.ClassifierTrainer.create_for(args.get_classifier(), session)
-    trainer.train_classifier(classifier)
-    c_stats = trainer.test_classifier(args, bm, classifier)
-    return session, r_stats, c_stats
 
 
 def try_model(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, mdl, regressor, classifier, stop_w,
@@ -317,9 +275,8 @@ def try_model(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, mdl,
     bit_sum, mdl, it = __iterate(args, bm, mdl, [args.get_min_bits_number() + offset] *
                                  bm.get_vars_number(), regressor, classifier)
     _, t = stop_w.stop()
-    print("[OPT] Initial solution found in {:.3f}s. Error for given configuration, input target: {:.3e}, {:.3e}"
+    print("[OPT] Initial solution found in {:.3f}s: [error, input target] = [{:.3e}, {:.1e}]"
           .format(t, it.get_error(), args.get_error()))
-
     if it.is_feasible():
         print("[OPT] Solution: {}".format(it.get_config()))
     else:
@@ -329,12 +286,12 @@ def try_model(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, mdl,
     wrong_configs = []
     while not it.is_feasible() and iterations < max_iterations:
         stop_w.start()
-        examples = __infer_examples(args, bm, it)
+        examples = data_gen.infer_examples(args, bm, it)
         _, t = stop_w.stop()
         print("[OPT] Inferring {:d} more examples ({:.3f}s)".format(len(examples), t))
 
         stop_w.start()
-        session, r_stats, c_stats = __ml_refinement(args, bm, regressor, classifier, session, examples)
+        session, r_stats, c_stats = data_gen.ml_refinement(args, bm, regressor, classifier, session, examples)
         _, t = stop_w.stop()
         print("[OPT] Retrained regressor (MAE {:.3f}) and classifier (accuracy {:.3f}%) in {:.3f}s"
               .format(r_stats['MAE'], c_stats['accuracy'] * 100, t))
@@ -348,7 +305,7 @@ def try_model(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, mdl,
         bit_sum, mdl, it = __iterate(args, bm, mdl, [v + 1 for v in it.get_config()], regressor, classifier, it,
                                      bit_sum, increment, wrong_configs, iterations)
         _, t = stop_w.stop()
-        print("[OPT] Solution # {:d} found in {:.3f}s. Error / target: {:.3e} / {:.3e}"
+        print("[OPT] Solution # {:d} found in {:.3f}s: [error, input target] = [{:.3e}, {:.1e}]"
               .format(iterations, t, it.get_error(), args.get_error()))
 
         if it.is_feasible():
