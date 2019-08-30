@@ -5,7 +5,7 @@ import decimal
 
 import numpy
 import pandas
-from sklearn import preprocessing, metrics, tree
+from sklearn import model_selection, preprocessing, metrics, tree
 import keras
 from keras import models, layers, callbacks
 
@@ -308,5 +308,7 @@ def create_training_session(args: argsm.ArgumentsHolder, benchmark: benchmarks.B
     df[class_label] = df.apply(lambda e: int(e[label] >= args.get_large_error_threshold()), axis=1)
     # Delete err_ds_<index> column as it is useless from here on
     del df[label]
+    # Split in train set and test set
+    train, test = model_selection.train_test_split(df, test_size=(len(df) - set_size) / len(df))
 
-    return TrainingSession(df[:set_size], df[set_size:], log_label, class_label)
+    return TrainingSession(train, test, log_label, class_label)

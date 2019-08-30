@@ -5,6 +5,7 @@ from enum import Enum
 import numpy
 
 import benchmarks
+import utils.printing_utils as pu
 
 
 class ArgsError(Enum):
@@ -96,10 +97,11 @@ class ArgumentsHolder:
         return self.__benchmark is not None and self.__exp != 0
 
     def __str__(self):
-        return "Using {:s} benchmark with a target error of {:.3e}. Training a {:s} regressor and a {:s} classifier " \
-               "using dataset # {:d}. All variables' number of bits must be in [{:d}, {:d}]"\
-            .format(self.__benchmark, self.get_error(), self.__regressor.name, self.__classifier.name,
-                    self.__datasetIndex, self.__minBitsNumber, self.__maxBitsNumber)
+        return "Benchmark {} ({}, vars in {}). {} regressor and {} classifier"\
+            .format(pu.param(self.__benchmark), pu.param_e(self.get_error()),
+                    pu.param("[{:d}, {:d}]".format(self.__minBitsNumber, self.__maxBitsNumber)),
+                    pu.param(self.__regressor.name),
+                    pu.param(self.__classifier.name))
 
 
 def __int_value(value):
@@ -172,26 +174,28 @@ def __max_bits(args: ArgumentsHolder, value):
 def error_handler(e, param, value):
     assert isinstance(param, str)
     param = param.replace('-', '')
+    err_str = "There was an input error"
     if ArgsError.UNKNOWN_BENCHMARK == e:
-        print("Can't find a benchmark called {}".format(value))
+        err_str = "Can't find a benchmark called {}".format(value)
     elif ArgsError.INT_CAST_ERROR == e:
-        print("Expected an integer value, found '{}' as {}".format(value, param))
+        err_str = "Expected an integer value, found '{}' as {}".format(value, param)
     elif ArgsError.INT_INVALID_VALUE == e:
-        print("{} value must be greater than 0".format(param))
+        err_str = "{} value must be greater than 0".format(param)
     elif ArgsError.REGRESSOR_ERROR == e:
         s = ''
         for reg in Regressor:
             s += reg.value + ', '
         s = s[:len(s) - 2]
-        print("Invalid regressor {}. Possible values are: {}".format(value, s))
+        err_str = "Invalid regressor {}. Possible values are: {}".format(value, s)
     elif ArgsError.CLASSIFIER_ERROR == e:
         s = ''
         for cl in Classifier:
             s += cl.value + ', '
         s = s[:len(s) - 2]
-        print("Invalid classifier {}. Possible values are: {}".format(value, s))
+        err_str = "Invalid classifier {}. Possible values are: {}".format(value, s)
 
     if ArgsError.NO_ERROR is not e:
+        print(pu.fatal(err_str))
         exit(e.value)
 
 
@@ -242,6 +246,6 @@ def handle_args(argv):
         error, value = __args[p](args, v)
         error_handler(error, p, v)
     if not args.is_legal():
-        print("Benchmark and error exponent are mandatory")
+        print(pu.fatal("Benchmark and error exponent are mandatory"))
         exit(1)
     return args

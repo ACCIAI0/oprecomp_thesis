@@ -6,10 +6,12 @@ import pandas
 import numpy
 
 import data_gen
-import io_utils
+from utils import io_utils
 import benchmarks
 import argsmanaging
 import training
+import utils.printing_utils as pu
+
 from docplex.mp import model
 from eml.backend import cplex_backend
 from eml.tree import embed as dt_embed
@@ -259,7 +261,7 @@ def __iterate(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, mdl,
               previous_it: Iteration = None, bit_sum=0, increment_step=0, wrong_configs=[], n_iter=-1):
     opt_config, mdl, bit_sum = __refine_and_solve_mp(bm, mdl, bit_sum, increment_step, wrong_configs, n_iter)
     if opt_config is None:
-        print('[OPT] WARNING: solution not found. Using rollback solution')
+        print("[OPT] {}".format(pu.warn("Solution not found, using rollback solution")))
         opt_config = rollback_config
         bit_sum = sum(opt_config)
 
@@ -275,10 +277,11 @@ def try_model(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, mdl,
     bit_sum, mdl, it = __iterate(args, bm, mdl, [args.get_min_bits_number() + offset] *
                                  bm.get_vars_number(), regressor, classifier)
     _, t = stop_w.stop()
-    print("[OPT] Initial solution found in {:.3f}s: [error, input target] = [{:.3e}, {:.1e}]"
-          .format(t, it.get_error(), args.get_error()))
+    print("[OPT] Initial solution found in {:.3f}s: [{}, {}] = [{}, {}]"
+          .format(t, pu.accent("error"), pu.param("input target"), pu.accent_e(it.get_error()),
+                  pu.param_e(args.get_error())))
     if it.is_feasible():
-        print("[OPT] Solution: {}".format(it.get_config()))
+        print("[OPT] Solution: {}".format(pu.show(it.get_config())))
     else:
         print("[OPT] Initial solution NOT feasible")
 
@@ -288,13 +291,13 @@ def try_model(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, mdl,
         stop_w.start()
         examples = data_gen.infer_examples(args, bm, it)
         _, t = stop_w.stop()
-        print("[OPT] Inferring {:d} more examples ({:.3f}s)".format(len(examples), t))
+        print("[OPT] Inferred {} more examples in {:.3f}s".format(pu.accent_int(len(examples)), t))
 
         stop_w.start()
         session, r_stats, c_stats = data_gen.ml_refinement(args, bm, regressor, classifier, session, examples)
         _, t = stop_w.stop()
-        print("[OPT] Retrained regressor (MAE {:.3f}) and classifier (accuracy {:.3f}%) in {:.3f}s"
-              .format(r_stats['MAE'], c_stats['accuracy'] * 100, t))
+        print("[OPT] Retrained regressor (MAE {}) and classifier (accuracy {}) in {:.3f}s"
+              .format(pu.accent_f(r_stats['MAE']), pu.accent("{:.3f}".format(c_stats['accuracy'] * 100)), t))
 
         increment = 0
         if 0 == iterations % increment_frequency and iterations >= first_increment:
@@ -305,13 +308,14 @@ def try_model(args: argsmanaging.ArgumentsHolder, bm: benchmarks.Benchmark, mdl,
         bit_sum, mdl, it = __iterate(args, bm, mdl, [v + 1 for v in it.get_config()], regressor, classifier, it,
                                      bit_sum, increment, wrong_configs, iterations)
         _, t = stop_w.stop()
-        print("[OPT] Solution # {:d} found in {:.3f}s: [error, input target] = [{:.3e}, {:.1e}]"
-              .format(iterations, t, it.get_error(), args.get_error()))
+        print("[OPT] Solution # {:d} found in {:.3f}s: [{}, {}] = [{}, {}]"
+              .format(iterations + 1, t, pu.accent("error"), pu.param("input target"), pu.accent_e(it.get_error()),
+                      pu.param_e(args.get_error())))
 
         if it.is_feasible():
-            print("[OPT] Solution: {}".format(it.get_config()))
+            print("[OPT] Solution: {}".format(pu.show(it.get_config())))
         else:
-            print("[OPT] Solution # {:d} NOT feasible".format(iterations))
+            print("[OPT] Solution # {:d} NOT feasible".format(iterations + 1))
 
         iterations += 1
 
