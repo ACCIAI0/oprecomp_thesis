@@ -102,6 +102,9 @@ class ArgumentsHolder:
                     pu.param("[{:d}, {:d}]".format(self.__minBitsNumber, self.__maxBitsNumber)),
                     pu.param(self.__regressor.name),
                     pu.param(self.__classifier.name))
+    
+    
+args = ArgumentsHolder()
 
 
 def __int_value(value):
@@ -116,7 +119,7 @@ def __int_value(value):
     return error, v
 
 
-def __benchmark(args: ArgumentsHolder, value):
+def __benchmark(value):
     error = ArgsError.NO_ERROR
     if not benchmarks.exists(value):
         error = ArgsError.UNKNOWN_BENCHMARK
@@ -125,14 +128,14 @@ def __benchmark(args: ArgumentsHolder, value):
     return error, value
 
 
-def _exp(args: ArgumentsHolder, value):
+def _exp(value):
     error, v = __int_value(value)
     if ArgsError.NO_ERROR == error:
         args.set_error_exp(v)
     return error, args.get_error_log()
 
 
-def __regressor(args: ArgumentsHolder, value):
+def __regressor(value):
     error = ArgsError.NO_ERROR
     if value not in [reg.value for reg in Regressor]:
         error = ArgsError.REGRESSOR_ERROR
@@ -141,7 +144,7 @@ def __regressor(args: ArgumentsHolder, value):
     return error, value
 
 
-def __classifier(args: ArgumentsHolder, value):
+def __classifier(value):
     error = ArgsError.NO_ERROR
     if value not in [cl.value for cl in Classifier]:
         error = ArgsError.CLASSIFIER_ERROR
@@ -150,21 +153,21 @@ def __classifier(args: ArgumentsHolder, value):
     return error, value
 
 
-def __dataset(args: ArgumentsHolder, value):
+def __dataset(value):
     error, v = __int_value(value)
     if ArgsError.NO_ERROR == error:
         args.set_dataset_index(v)
     return error, v
 
 
-def __min_bits(args: ArgumentsHolder, value):
+def __min_bits(value):
     error, v = __int_value(value)
     if ArgsError.NO_ERROR == error:
         args.set_min_bits_number(v)
     return error, v
 
 
-def __max_bits(args: ArgumentsHolder, value):
+def __max_bits(value):
     error, v = __int_value(value)
     if ArgsError.NO_ERROR == error:
         args.set_max_bits_number(v)
@@ -219,8 +222,6 @@ def handle_args(argv):
         :return: an ArgumentHolder if all arguments are legal. If any of them is not, the program quits.
     """
 
-    args = ArgumentsHolder()
-
     if 0 == len(argv):
         print("Some parameters are mandatory. Use -help to see all possible parameter names.")
         exit(-1)
@@ -243,9 +244,10 @@ def handle_args(argv):
 
         if i + 1 < len(argv):
             v = argv[i + 1]
-        error, value = __args[p](args, v)
+        error, value = __args[p](v)
         error_handler(error, p, v)
     if not args.is_legal():
         print(pu.fatal("Benchmark and error exponent are mandatory"))
         exit(1)
     return args
+    

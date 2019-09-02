@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import math
+from sys import float_info
 import decimal
 
 import numpy
@@ -9,7 +9,7 @@ from sklearn import model_selection, preprocessing, metrics, tree
 import keras
 from keras import models, layers, callbacks
 
-import argsmanaging as argsm
+from argsmanaging import args, Regressor, Classifier
 import benchmarks
 
 
@@ -65,8 +65,8 @@ class RegressorTrainer:
     NN_regressor_type = '_regrNN_2x1x'
 
     @staticmethod
-    def create_for(regressor_type: argsm.Regressor, session: TrainingSession):
-        if argsm.Regressor.NEURAL_NETWORK == regressor_type:
+    def create_for(regressor_type: Regressor, session: TrainingSession):
+        if Regressor.NEURAL_NETWORK == regressor_type:
             return NNRegressorTrainer(session)
         return None
 
@@ -79,7 +79,7 @@ class RegressorTrainer:
     def train_regressor(self, regressor, epochs: int = 100, batch_size: int = 32, verbose=True, weights=None):
         pass
 
-    def test_regressor(self, args: argsm.ArgumentsHolder, bm: benchmarks.Benchmark, regressor):
+    def test_regressor(self, bm: benchmarks.Benchmark, regressor):
         pass
 
 
@@ -122,7 +122,7 @@ class NNRegressorTrainer(RegressorTrainer):
                       batch_size=batch_size, shuffle=True, validation_split=0.1, verbose=verbose,
                       callbacks=[early_stopping, reduce_lr])
 
-    def test_regressor(self, args: argsm.ArgumentsHolder, bm: benchmarks.Benchmark, regressor):
+    def test_regressor(self, bm: benchmarks.Benchmark, regressor):
         test_loss = regressor.evaluate(self.__test_data_tensor, self.__test_target_tensor, verbose=0)
         predicted = regressor.predict(self.__test_data_tensor)
         stats_res = {}
@@ -130,7 +130,6 @@ class NNRegressorTrainer(RegressorTrainer):
         pred = predicted[:, 0]
         if pred_n_cols > 1:
             mus = predicted[:, 0]
-            sigmas = predicted[:, 1]
             predicted = mus
         else:
             predicted = pred
@@ -160,7 +159,7 @@ class NNRegressorTrainer(RegressorTrainer):
 
         stats_res["MAE"] = decimal.Decimal(numpy.mean(numpy.asarray(abs_errors)))
         stats_res["MSE"] = decimal.Decimal(numpy.mean(numpy.asarray(squared_errors)))
-        stats_res["RMSE"] = decimal.Decimal(math.sqrt(stats_res["MSE"]))
+        stats_res["RMSE"] = decimal.Decimal(numpy.sqrt(stats_res["MSE"]))
         stats_res["MAPE"] = decimal.Decimal(numpy.mean(numpy.asarray(p_abs_errors)))
         stats_res["SMAPE"] = decimal.Decimal(numpy.mean(numpy.asarray(sp_abs_errors)))
         stats_res["ERRORS"] = errors
@@ -183,7 +182,7 @@ class NNRegressorTrainer(RegressorTrainer):
 
         stats_res['test_loss'] = test_loss
 
-        max_conf = [args.get_max_bits_number() for i in range(bm.get_vars_number())]
+        max_conf = [args.get_max_bits_number()] * bm.get_vars_number()
         max_conf_dict = {}
         for i in range(len(max_conf)):
             max_conf_dict['var_{}'.format(i)] = [max_conf[i]]
@@ -195,8 +194,8 @@ class NNRegressorTrainer(RegressorTrainer):
 
 class ClassifierTrainer:
     @staticmethod
-    def create_for(classifier_type: argsm.Classifier, session: TrainingSession):
-        if argsm.Classifier.DECISION_TREE == classifier_type:
+    def create_for(classifier_type: Classifier, session: TrainingSession):
+        if Classifier.DECISION_TREE == classifier_type:
             return DTClassifierTrainer(session)
         return None
 
@@ -209,7 +208,7 @@ class ClassifierTrainer:
     def train_classifier(self, classifier, weights=None,  weight_large_errors=10):
         pass
 
-    def test_classifier(self, args: argsm.ArgumentsHolder, bm: benchmarks.Benchmark, classifier):
+    def test_classifier(self, bm: benchmarks.Benchmark, classifier):
         pass
 
 
@@ -230,7 +229,7 @@ class DTClassifierTrainer(ClassifierTrainer):
                     weights[i] *= weight_large_errors
         classifier.fit(self._session.get_training_set(), self._session.get_classifier_target(), sample_weight=weights)
 
-    def test_classifier(self, args: argsm.ArgumentsHolder, bm: benchmarks.Benchmark, classifier):
+    def test_classifier(self, bm: benchmarks.Benchmark, classifier):
         predicted = classifier.predict(self._session.get_test_set())
         pred_classes = [0] * len(predicted)
         for i in range(len(predicted)):
@@ -269,7 +268,7 @@ def __initialize_mean_std(benchmark: benchmarks.Benchmark, label: str, log_label
 
     if clamp:
         df.loc[df[label] > __clamped_error_limit, label] = __clamped_error_limit
-    df[log_label] = [math.inf if 0 == x else -numpy.log(x) for x in df[label]]
+    df[log_label] = [float_info.min if 0 == x else -numpy.log(x) for x in df[label]]
 
     return df
 
@@ -290,7 +289,7 @@ def __select_subset(df: pandas.DataFrame, threshold: float, error_label: str, si
     return df_t
 
 
-def create_training_session(args: argsm.ArgumentsHolder, benchmark: benchmarks.Benchmark,
+def create_training_session(benchmark: benchmarks.Benchmark,
                             initial_sampling_size: int = 3000, set_size: int = 500) -> TrainingSession:
     label = 'err_ds_{}'.format(args.get_dataset_index())
     log_label = 'err_log_ds_{}'.format(args.get_dataset_index())

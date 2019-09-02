@@ -27,3 +27,6 @@ class Stopwatch:
 
     def get_duration(self):
         return self.__exec_time
+
+
+stop_w = Stopwatch()

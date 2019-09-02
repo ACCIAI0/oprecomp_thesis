@@ -5,10 +5,11 @@ warnings.filterwarnings('ignore')
 
 import sys
 import os
+import datetime
 
 from tensorflow.compat.v1 import logging
 
-from utils.stopwatch import Stopwatch
+from utils.stopwatch import stop_w
 import argsmanaging as am
 import benchmarks
 import training
@@ -17,8 +18,6 @@ import utils.printing_utils as pu
 
 
 def main(argv):
-    stop_w = Stopwatch()
-
     # ArgumentsHolder containing all legal initialization params.
     args = am.handle_args(argv)
     print('[LOG] {}\n'.format(args))
@@ -34,7 +33,7 @@ def main(argv):
 
     # Build training set and test set for a new training session
     stop_w.start()
-    session = training.create_training_session(args, bm, set_size=900)
+    session = training.create_training_session(bm, set_size=500)
     _, t = stop_w.stop()
     print("[LOG] Created first training session from dataset #{:d} in {:.3f}s ({} entries for training, "
           "{} for test)".format(args.get_dataset_index(), t, pu.accent_int(len(session.get_training_set())),
@@ -48,7 +47,7 @@ def main(argv):
     print("[LOG] Regressor created in {:.3f}s".format(t))
     stop_w.start()
     trainer.train_regressor(regressor, verbose=False)
-    r_stats = trainer.test_regressor(args, bm, regressor)
+    r_stats = trainer.test_regressor(bm, regressor)
     _, t = stop_w.stop()
     print("[LOG] First training of the regressor completed in {:.3f}s (MAE {})"
           .format(t, pu.accent_f(r_stats['MAE'])))
@@ -61,24 +60,23 @@ def main(argv):
     print("[LOG] Classifier created in {:.3f}s".format(t))
     stop_w.start()
     trainer.train_classifier(classifier)
-    c_stats = trainer.test_classifier(args, bm, classifier)
+    c_stats = trainer.test_classifier(bm, classifier)
     _, t = stop_w.stop()
     print("[LOG] First training of the classifier completed in {:.3f}s (accuracy {})"
           .format(t, pu.accent("{:.3f}%".format(c_stats['accuracy'] * 100))))
 
     # Create a MP model
     stop_w.start()
-    optim_model = optimization.create_optimization_model(args, bm, regressor, classifier, limit_search_exp=4)
+    optim_model = optimization.create_optimization_model(bm, regressor, classifier, limit_search_exp=4)
     _, t = stop_w.stop()
     print("[LOG] Created an optimization model in {:.3f}s\n".format(t))
 
     # Solve optimization problem
-    config, its = optimization.try_model(args, bm, optim_model, regressor, classifier, stop_w,
-                                         session)
+    config, its = optimization.try_model(bm, optim_model, regressor, classifier, session)
     # TODO FINAL CHECK BEING... who knows
-
-    print(pu.show("\nTotal execution time: {:.3f}s, refinement iterations: {:d}"
-          .format(stop_w.get_duration(), its), alternate=True))
+    print("\n[LOG] SOLUTION FOUND: {}".format(pu.show(config, alternate=True)))
+    print(pu.show("[LOG] Total execution time: {}s, refinement iterations: {:d}"
+          .format(datetime.timedelta(seconds=stop_w.get_duration()), its), alternate=True))
 
 
 '''

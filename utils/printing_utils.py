@@ -27,8 +27,8 @@ def warn(content):
     return style(content, Fore.YELLOW, Back.RESET, Style.NORMAL, "{}")
 
 
-def accent(content):
-    return style(content, Fore.GREEN, Back.RESET, Style.NORMAL, "{}")
+def accent(content, alternate=False):
+    return style(content, Fore.CYAN if alternate else Fore.GREEN, Back.RESET, Style.NORMAL, "{}")
 
 
 def param(content):
@@ -39,8 +39,8 @@ def show_int(content, alternate=False):
     return style(content, Fore.CYAN if alternate else Fore.GREEN, Back.RESET, Style.BRIGHT, "{:d}")
 
 
-def accent_int(content):
-    return style(content, Fore.GREEN, Back.RESET, Style.NORMAL, "{:d}")
+def accent_int(content, alternate=False):
+    return style(content, Fore.CYAN if alternate else Fore.GREEN, Back.RESET, Style.NORMAL, "{:d}")
 
 
 def param_int(content):
@@ -51,8 +51,8 @@ def show_e(content, alternate=False):
     return style(content, Fore.CYAN if alternate else Fore.GREEN, Back.RESET, Style.BRIGHT, "{:.3e}")
 
 
-def accent_e(content):
-    return style(content, Fore.GREEN, Back.RESET, Style.NORMAL, "{:.3e}")
+def accent_e(content, alternate=False):
+    return style(content, Fore.CYAN if alternate else Fore.GREEN, Back.RESET, Style.NORMAL, "{:.3e}")
 
 
 def param_e(content):
@@ -63,10 +63,18 @@ def show_f(content, alternate=False):
     return style(content, Fore.CYAN if alternate else Fore.GREEN, Back.RESET, Style.BRIGHT, "{:.3f}")
 
 
-def accent_f(content):
-    return style(content, Fore.GREEN, Back.RESET, Style.NORMAL, "{:.3f}")
+def accent_f(content, alternate=False):
+    return style(content, Fore.CYAN if alternate else Fore.GREEN, Back.RESET, Style.NORMAL, "{:.3f}")
 
 
 def param_f(content):
     return style(content, Fore.BLUE, Back.RESET, Style.NORMAL, "{:.3f}")
+
+
+def str_len_f(content):
+    return len("{:.3f}".format(content))
+
+
+def str_len_e(content):
+    return len("{:.3e}".format(content))
 
