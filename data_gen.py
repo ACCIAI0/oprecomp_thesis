@@ -55,16 +55,19 @@ def __find_neighbours(solution, min_b, max_b, iterations):
 
 
 def infer_examples(bm: benchmarks.Benchmark, it):
-    dif_target = 1 / (it.get_error_log() - args.get_error_log())
-    new_ex_weight = dif_target
-    if dif_target <= 0:
-        new_ex_weight = 0.01
-    elif dif_target > 2:
-        new_ex_weight = 1
+    temp = it
+    while temp is not None and temp.has_failed:
+        temp = temp.get_previous_iteration()
+
+    if temp is not None:
+        it = temp
+
+    delta = numpy.maximum(.004, numpy.abs(it.get_error_log() - args.get_error_log()))
+    weight = 1 / delta
 
     neighbours = __find_neighbours(it.get_config(), args.get_min_bits_number(), args.get_max_bits_number(),
                                    bm.get_vars_number() * int(1 / __change_p))
-    return ExamplesGenerator(it.get_config(), neighbours, it.get_error_log(), it.get_error_class(), new_ex_weight)
+    return ExamplesGenerator(it.get_config(), neighbours, it.get_error_log(), it.get_error_class(), weight)
 
 
 def ml_refinement(bm: benchmarks.Benchmark, regressor, classifier,

@@ -20,7 +20,7 @@ import utils.printing_utils as pu
 def main(argv):
     # ArgumentsHolder containing all legal initialization params.
     args = am.handle_args(argv)
-    print('[LOG] {}\n'.format(args))
+    print('\n[LOG] {}'.format(args))
 
     # Benchmarks information. Contains a relational graph among variables inside the benchmark program and the number
     # of them.
@@ -67,16 +67,16 @@ def main(argv):
 
     # Create a MP model
     stop_w.start()
-    optim_model = optimization.create_optimization_model(bm, regressor, classifier, limit_search_exp=4)
+    optim_model = optimization.create_optimization_model(bm, regressor, classifier, limit_search_exp=6)
     _, t = stop_w.stop()
     print("[LOG] Created an optimization model in {:.3f}s\n".format(t))
 
     # Solve optimization problem
     config, its = optimization.try_model(bm, optim_model, regressor, classifier, session)
-    # TODO FINAL CHECK BEING... who knows
-    print("\n[LOG] SOLUTION FOUND: {}".format(pu.show(config, alternate=True)))
-    print(pu.show("[LOG] Total execution time: {}s, refinement iterations: {:d}"
-          .format(datetime.timedelta(seconds=stop_w.get_duration()), its), alternate=True))
+
+    print("[LOG] SOLUTION FOUND: {}".format(pu.show(config, alternate=True)))
+    print("[LOG] {}\n".format(pu.show("Total execution time: {}s, search iterations: {:d}"
+                                      .format(datetime.timedelta(seconds=stop_w.duration), its), alternate=True)))
 
 
 '''

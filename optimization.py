@@ -1,13 +1,11 @@
 #!/usr/bin/python
 
-import subprocess
 from sys import float_info
 
 import pandas
 import numpy
 
 import data_gen
-from utils import io_utils
 import benchmarks
 from argsmanaging import args, Regressor, Classifier
 import training
@@ -21,22 +19,25 @@ from eml.tree.reader import sklearn_reader
 from eml.net import process, embed as nn_embed
 from eml.net.reader import keras_reader
 
-__max_target_error = numpy.ceil(-numpy.log(1e-80))
+__max_target_error = numpy.ceil(-numpy.log10(1e-80))
 __n_vars_bounds_tightening = 10
 __bounds_opt_time_limit = 10
 __classifier_threshold = .5
 
 
 class Iteration:
-    def __init__(self, config, error, predicted_error, predicted_class, is_rollback,
-                 previous_iteration=None):
+    def __init__(self, config, error, predicted_error, predicted_class, previous_iteration, failed):
         self.__config = config
         self.__error = error
         self.__pError = predicted_error
         self.__pClass = predicted_class
         self.__previous = previous_iteration
-        self.__isRollback = is_rollback
+        self.__p_best_cfg, self.__p_best_err = (None, 0) if self.__previous is None else self.__previous.get_best()
         self.__args = args
+        self.__failed = failed
+
+    def get_previous_iteration(self):
+        return self.__previous
 
     def get_config(self):
         return self.__config
@@ -48,7 +49,7 @@ class Iteration:
         return int(self.__error >= self.__args.get_large_error_threshold())
 
     def get_error_log(self):
-        return -numpy.log(self.__error) if 0 != self.__error else float_info.min
+        return -numpy.log10(self.__error) if 0 != self.__error else float_info.min
 
     def get_predicted_error_log(self):
         return self.__pError
@@ -74,15 +75,22 @@ class Iteration:
             return 0
         return self.__previous.get_error_log() - self.get_error_log()
 
-    def get_best_config(self):
-        if self.__previous is not None:
-            prev = self.__previous.get_best_config()
-            if sum(self.__config) >= sum(prev) and self.__previous.is_feasible():
-                return prev
-        return self.__config
+    def get_best(self):
+        if self.__p_best_cfg is None:
+            if self.is_feasible():
+                return self.__config, self.__error
+            else:
+                return None, 0
+        else:
+            sum_c = sum(self.__config)
+            sum_c_p = sum(self.__p_best_cfg)
+            if self.is_feasible() and (sum_c < sum_c_p or (sum_c == sum_c_p and self.__error < self.__p_best_err)):
+                return self.__config, self.__error
+            else:
+                return self.__p_best_cfg, self.__p_best_err
 
-    def is_rollback(self):
-        return self.__isRollback
+    def has_failed(self):
+        return self.__failed
 
 
 def __eml_regressor_nn(bm: benchmarks.Benchmark, regressor):
@@ -90,7 +98,7 @@ def __eml_regressor_nn(bm: benchmarks.Benchmark, regressor):
     regressor_em.reset_bounds()
     for neuron in regressor_em.layer(0).neurons():
         neuron.update_lb(args.get_min_bits_number())
-        neuron.update_lb(args.get_max_bits_number())
+        neuron.update_ub(args.get_max_bits_number())
 
     process.ibr_bounds(regressor_em)
 
@@ -126,11 +134,11 @@ def create_optimization_model(bm: benchmarks.Benchmark, regressor, classifier, r
     x_vars = [mdl.integer_var(lb=args.get_min_bits_number(), ub=args.get_max_bits_number(), name='x_{}'.format(i))
               for i in range(bm.get_vars_number())]
 
-    # If is a limited search in n orders of magnitudes, change the upper_bound to be -log(10e(n + exp)) where exp is the
-    # input parameter to calculate the error.
+    # If it is a limited search in n orders of magnitudes, change the upper_bound to be -log(10e-(n + exp)) where exp is
+    # the input parameter to calculate the error.
     upper_bound = __max_target_error
     if 0 != limit_search_exp:
-        upper_bound = numpy.ceil(-numpy.log(numpy.float_power(10, -args.get_exponent() - limit_search_exp)))
+        upper_bound = numpy.ceil(-numpy.log10(numpy.float_power(10, -args.get_exponent() - limit_search_exp)))
 
     # Moved this to be a lower bound instead of a constraint
     target_error_log = numpy.ceil(args.get_error_log())
@@ -172,78 +180,27 @@ def create_optimization_model(bm: benchmarks.Benchmark, regressor, classifier, r
     return mdl
 
 
-def __refine_and_solve_mp(bm: benchmarks.Benchmark, mdl, n_iter, bad_config=None):
-
+def __refine_and_solve_mp(bm: benchmarks.Benchmark, mdl, n_iter, it: Iteration):
     # Remove an infeasible solution from the solutions pool
-    if bad_config is not None:
+    if it is not None and not it.has_failed() and not it.is_feasible():
         bin_vars_cut_vals = []
-        for i in range(len(bad_config)):
+        for i in range(len(it.get_config())):
             x_var = mdl.get_var_by_name('x_{}'.format(i))
             bin_vars_cut_vals.append(mdl.binary_var(name='bvcv_{}_{}'.format(n_iter, i)))
-            mdl.add(mdl.if_then(x_var == bad_config[i], bin_vars_cut_vals[i] == 1))
+            mdl.add(mdl.if_then(x_var == it.get_config()[i], bin_vars_cut_vals[i] == 1))
         mdl.add_constraint(sum(bin_vars_cut_vals) <= 1)
+
+    # Add a constraint to force the model to find better solutions than the one currently given as the best one
+    if it is not None:
+        best, _ = it.get_best()
+        if best is not None:
+            mdl.add_constraint(mdl.get_var_by_name('bit_sum') <= sum(best) - 1)
 
     solution = mdl.solve()
     opt_config = None
     if solution is not None:
         opt_config = [int(solution['x_{}'.format(i)]) for i in range(bm.get_vars_number())]
     return opt_config, mdl
-
-
-def __check_output(floating_result, target_result):
-    very_large_error = 1000
-    if len(floating_result) != len(target_result) or \
-            all(v == 0 for v in floating_result) != all(v == 0 for v in target_result):
-        return very_large_error
-
-    sqnr = 0.00
-    for i in range(len(floating_result)):
-        # if floating_result[i] == 0, check_output returns 1: this is an
-        # unwanted behaviour
-        if floating_result[i] == 0.00:
-            continue    # mmmhhh, TODO: fix this in a smarter way
-
-        # if there is even just one inf in the result list, we assume that
-        # for the given configuration the program did not run properly
-        if str(floating_result[i]) == 'inf':
-            return 'Nan'
-
-        signal_sqr = target_result[i] ** 2
-        error_sqr = (floating_result[i] - target_result[i]) ** 2
-        temp = 0.00
-        if error_sqr != 0.00:
-            temp = signal_sqr / error_sqr
-        if temp != 0:
-            temp = 1.0 / temp
-        if temp > sqnr:
-            sqnr = temp
-
-    return sqnr
-
-
-def __run_check(program, target_result, dataset_index):
-    params = [program, '42']
-    if -1 != dataset_index:
-        params.append(str(dataset_index))
-    output = subprocess.Popen(params, stdout=subprocess.PIPE).communicate()[0]
-    result = io_utils.parse_output(output.decode('utf-8'))
-    return __check_output(result, target_result)
-
-
-def __check_solution(bm: benchmarks.Benchmark, opt_config):
-    io_utils.write_configs_file(bm.get_configs_file(), opt_config)
-    if -1 == args.get_dataset_index():
-        program = bm.get_home() + bm.get_map() + '.sh'
-        target_file = bm.get_home() + 'target.txt'
-    else:
-        program = bm.get_home() + bm.get_map() + '_multiDataSet.sh'
-        target_file = bm.get_home() + 'targets/target_{}.txt'.format(args.get_dataset_index())
-
-    target_result = io_utils.read_target(target_file)
-    error = __run_check(program, target_result, args.get_dataset_index())
-
-    io_utils.write_configs_file(bm.get_configs_file(), [args.get_max_bits_number()] * bm.get_vars_number())
-    return error
 
 
 def __get_pred_class(config, regr, classifier):
@@ -253,24 +210,24 @@ def __get_pred_class(config, regr, classifier):
     return prediction_with_conf[0], class_pred_with_conf
 
 
-def __iterate(bm: benchmarks.Benchmark, mdl, rollback_config, regressor, classifier, previous_it: Iteration = None,
-              n_iter=0):
-    bad_config = None
-    if previous_it is not None and not previous_it.is_feasible():
-        bad_config = previous_it.get_config()
-    opt_config, mdl = __refine_and_solve_mp(bm, mdl, n_iter, bad_config=bad_config)
-    is_rollback = opt_config is None
-    if is_rollback:
-        opt_config = rollback_config
+def __iterate(bm: benchmarks.Benchmark, mdl, regressor, classifier, previous_it: Iteration = None, n_iter=0):
+    opt_config, mdl = __refine_and_solve_mp(bm, mdl, n_iter, previous_it)
+    failed = False
+    if opt_config is None:
+        failed = True
+        opt_config = numpy.random.randint(args.get_min_bits_number(), args.get_max_bits_number(), bm.get_vars_number())
 
-    error = __check_solution(bm, opt_config)
+    error = benchmarks.run_benchmark_with_config(bm, opt_config, args)
     predicted_error, predicted_class = __get_pred_class(opt_config, regressor, classifier)
-    return mdl, Iteration(opt_config, error, predicted_error, predicted_class, is_rollback, previous_it)
+    return mdl, Iteration(opt_config, error, predicted_error, predicted_class, previous_it, failed)
 
 
 def __log_iteration(it: Iteration, n, t):
-    print("[OPT] Solution # {:d} found in {:.3f}s:".format(n, t))
-
+    if it.has_failed():
+        print("[OPT] {} {}".format(pu.warn("Generated solution n. " + str(n)),
+                                   pu.show(it.get_config(), alternate=True)))
+    else:
+        print("[OPT] Solution n. {:d} found in {:.3f}s:".format(n, t))
     target_label = "target error"
     error_label = "calculated error"
     predicted_label = "predicted error"
@@ -293,25 +250,26 @@ def __log_iteration(it: Iteration, n, t):
                   pu.accent_f(it.get_predicted_error_log())
     print("[OPT] {}  {}  |  {}  {}  {}".format(error, predicted, l_target, l_error, l_predicted))
 
-    if not it.is_rollback():
-        ending = pu.accent("FEASIBLE", alternate=True) if it.is_feasible() else pu.err("NOT FEASIBLE")
-        print("[OPT] Solution # {:d} {} is {}".format(n, pu.show(it.get_config()), ending))
-    else:
-        print("[OPT] {} {} {}".format(pu.warn("Solution # {:d}".format(n)), pu.show(it.get_config()),
-                                      pu.warn("is a rollback. Next iteration")))
+    state = pu.accent("FEASIBLE", alternate=True) if it.is_feasible() else pu.err("NOT FEASIBLE")
+    print("[OPT] Solution n. {:d} {} is {}".format(n, pu.show(it.get_config()), state))
+    print()
 
 
 def try_model(bm: benchmarks.Benchmark, mdl, regressor, classifier, session: training.TrainingSession,
-              max_iterations=100):
+              max_iterations=100, refinement_steps=5):
     stop_w.start()
-    offset = int((args.get_max_bits_number() - args.get_min_bits_number()) / 2)
-    mdl, it = __iterate(bm, mdl, [args.get_min_bits_number() + offset] * bm.get_vars_number(), regressor, classifier)
+    mdl, it = __iterate(bm, mdl, regressor, classifier)
     _, t = stop_w.stop()
     __log_iteration(it, 0, t)
-    print()
 
     iterations = 1
-    while not (it.is_feasible() and not it.is_rollback()) and iterations <= max_iterations:
+    current_refinement = 0
+    while current_refinement < refinement_steps and iterations <= max_iterations:
+        best, _ = it.get_best()
+        if best is not None:
+            current_refinement += 1
+            print("[OPT] {}".format(pu.show("Refinement " + str(current_refinement), True)))
+
         stop_w.start()
         examples = data_gen.infer_examples(bm, it)
         _, t = stop_w.stop()
@@ -324,11 +282,10 @@ def try_model(bm: benchmarks.Benchmark, mdl, regressor, classifier, session: tra
               .format(pu.accent_f(r_stats['MAE']), pu.accent("{:.3f}%".format(c_stats['accuracy'] * 100)), t))
 
         stop_w.start()
-        mdl, it = __iterate(bm, mdl, [numpy.minimum(v + 1, args.get_max_bits_number()) for v in it.get_config()],
-                            regressor, classifier, it, iterations)
+        mdl, it = __iterate(bm, mdl, regressor, classifier, it, iterations)
         _, t = stop_w.stop()
         __log_iteration(it, iterations, t)
-        print()
         iterations += 1
 
-    return it.get_best_config(), iterations - 1
+    best, _ = it.get_best()
+    return best, iterations - 1 - current_refinement

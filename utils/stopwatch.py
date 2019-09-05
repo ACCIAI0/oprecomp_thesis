@@ -25,7 +25,8 @@ class Stopwatch:
         self.__exec_time += duration
         return t, duration
 
-    def get_duration(self):
+    @property
+    def duration(self):
         return self.__exec_time
 
 

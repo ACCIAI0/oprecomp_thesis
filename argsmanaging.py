@@ -52,7 +52,7 @@ class ArgumentsHolder:
         return numpy.float_power(10, -self.__exp)
 
     def get_error_log(self):
-        return -numpy.log(self.get_error())
+        return -numpy.log10(self.get_error())
 
     def set_error_exp(self, exp):
         self.__exp = exp

@@ -268,7 +268,7 @@ def __initialize_mean_std(benchmark: benchmarks.Benchmark, label: str, log_label
 
     if clamp:
         df.loc[df[label] > __clamped_error_limit, label] = __clamped_error_limit
-    df[log_label] = [float_info.min if 0 == x else -numpy.log(x) for x in df[label]]
+    df[log_label] = [float_info.min if 0 == x else -numpy.log10(x) for x in df[label]]
 
     return df
 
